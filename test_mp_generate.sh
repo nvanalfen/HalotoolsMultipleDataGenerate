@@ -1,0 +1,1 @@
+python3 generate_median_training_data.py 1 1

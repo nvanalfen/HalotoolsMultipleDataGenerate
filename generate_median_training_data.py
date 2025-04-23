@@ -259,8 +259,8 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
 
         inputs.append( usable_inputs[i] )
 
-        inputs = {keys[j]: usable_inputs[i][j] for j in range(len(keys))}
-        results = calculate_all_iterations(model, rbins, halocat, inner_runs, inputs, max_attempts)
+        input_dict = {keys[j]: usable_inputs[i][j] for j in range(len(keys))}
+        results = calculate_all_iterations(model, rbins, halocat, inner_runs, input_dict, max_attempts)
         outputs[i] = results
 
         if i % save_every == 0:
@@ -268,21 +268,11 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
 
     return keys, np.array(inputs), outputs
 
-if __name__ == "__main__":
-
-    ############################################################################################################################
-    ##### SET UP VARIABLES #####################################################################################################
-    ############################################################################################################################
-
-    # Administrative variables
-    assert len(sys.argv) == 3, "Must provide job number and max jobs"
-    job = int(sys.argv[1])
-    max_jobs = int(sys.argv[2])
-
+def main(job, max_jobs):
     ############################################################################################################################
     # MODEL PARAMETERS #########################################################################################################
     ############################################################################################################################
-    inner_runs = 10
+    inner_runs = 2
     constant = True
     catalog = "bolplanck"
     #catalog = "multidark"
@@ -291,7 +281,7 @@ if __name__ == "__main__":
     #rbins = np.logspace(-1,1.8,29)
     rbin_centers = (rbins[:-1]+rbins[1:])/2.0
 
-    param_f_name = "params.npz"                # Location of the input parameter file
+    param_f_name = "test_params.npz"                # Location of the input parameter file
     output_dir = "results"                     # Location to save the output data
 
     ############################################################################################################################
@@ -322,9 +312,21 @@ if __name__ == "__main__":
 
     # Generate Data
     keys, inputs, outputs = generate_training_data(model, rbins, job, max_jobs, halocat, 
-                                            inner_runs=inner_runs, save_every=5, param_loc="../100X_Data/params.npz", output_dir=output_dir, suffix=suffix)
+                                            inner_runs=inner_runs, save_every=2, param_loc=param_f_name, output_dir=output_dir, suffix=suffix)
 
     # Save data, making sure to account for this script being run on multiple jobs
     np.savez( os.path.join( output_dir, f"full_run_{suffix}.npz" ), keys=keys, inputs=inputs, outputs=outputs )
 
     print("Time: ", time.time()-start,"\n")
+
+if __name__ == "__main__":
+    ############################################################################################################################
+    ##### SET UP VARIABLES #####################################################################################################
+    ############################################################################################################################
+
+    # Administrative variables
+    assert len(sys.argv) == 3, "Must provide job number and max jobs"
+    job = int(sys.argv[1])
+    max_jobs = int(sys.argv[2])
+
+    main(job, max_jobs)
