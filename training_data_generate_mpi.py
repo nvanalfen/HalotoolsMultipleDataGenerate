@@ -56,25 +56,121 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=1
 
     return keys, inputs, outputs
 
-def root(comm, keys, inputs):
-    input_length = len(inputs)
+def determine_size(shape, rank, min_rank, max_rank):
+    """
+    Determine the size of the array to be sent to each rank.
+    This function is used to determine the start and end indices for each rank.
+    these indices will determine buffer size.
+    """
+    rows, cols = shape
+    # split up the indices by which rank will be in charge
+    chunk_size = int(rows // (max_rank - min_rank + 1))
 
-def nonroot(comm, keys, input_length):
-    pass
+    assert rank >= min_rank, "Rank must be greater than lowest rank"
+
+    start = (rank - min_rank) * chunk_size
+    end = min(start + chunk_size, rows)
+
+    # If this is the last rank, it will take care of the rest of the rows
+    if rank == max_rank:
+        end = rows
+    return start, end, cols
+
+def broadcast_keys(comm, keys):
+    # Encode into byte array
+    maxlen = max(len(key) for key in keys)
+    arr = np.zeros((len(keys), maxlen), dtype="S1")
+    for i, s in enumerate(keys):
+        arr[i, :len(s)] = np.frombuffer(s.encode('utf-8'), dtype='S1')
+
+    # Broadcast the shape of the array
+    shape = np.array(arr.shape, dtype=int)
+    comm.Bcast(shape, root=0)
+
+    # Broadcast the array
+    comm.Bcast(arr, root=0)
+
+def receive_keys(comm):
+    # Get the shape of the chararray from the root
+    shape = np.empty(2, dtype=int)
+    comm.Bcast(shape, root=0)
+
+    # Create an empty array to hold the keys
+    arr = np.chararray(shape, itemsize=1)
+    comm.Bcast(arr, root=0)
+
+    # decode byte array into keys
+    return [b''.join(row).decode('utf-8').rstrip('\x00') for row in arr]
+
+def root(comm, param_loc):
+
+    data = np.load(param_loc)
+    keys = data['keys']
+    inputs = data['inputs']
+
+    # Send the keys to all ranks
+    broadcast_keys(comm, keys)
+
+    # Broadcast shape of inputs to all ranks
+    input_shape = np.array(inputs.shape, dtype=int)
+    comm.Bcast(input_shape, root=0)
+
+    rank_ownership = {}                 # Which ranks take care of which rows of data
+    requests = []                       # List of requests for non-blocking sends
+    for i in range(1, comm.Get_size()):
+        # Set lowest rank to 0 as root rank will be involved as well
+        start_ind, end_ind, cols = determine_size(input_shape, i, 0, comm.Get_size()-1)
+        rank_ownership[i] = (start_ind, end_ind)
+
+        # Send the inputs to the rank
+        sendbuf = inputs[start_ind:end_ind]
+        req = comm.Isend(sendbuf, dest=i, tag=0)
+        requests.append(req)
+
+    # Wait for all sends to complete
+    MPI.Request.Waitall(requests)
+
+    # Now that the relevant inputs have been sent off to other ranks, gather our own to be done by root
+    start_ind, end_ind, cols = determine_size(input_shape, 0, 0, comm.Get_size()-1)
+    root_inputs = inputs[start_ind:end_ind]
+
+    # TODO: Enter calculation loop. Non-root ranks will also do this
+
+    # TODO: use Irecv to receive the results from non-root ranks
+
+def nonroot(comm):
+    rank = comm.Get_rank()
+
+    # Receive the keys from root
+    keys = receive_keys(comm)
+    
+    # Receive shape of inputs from root
+    input_shape = np.empty(2, dtype=int)
+    comm.Bcast(input_shape, root=0)
+
+    # Get the size to allocate a buffer for the relevant inputs
+    start_ind, end_ind, cols = determine_size(input_shape, rank, lowest_rank=0, highest_rank=comm.Get_size()-1)
+    rows = end_ind - start_ind
+
+    # Create a buffer to hold the inputs
+    inputs = np.empty((rows, cols), dtype=float)
+    # Receive the inputs from root
+    req = comm.IRecv(inputs, source=0, tag=0)
+    req.Wait()
+
+    # Now we have the inputs, we can do whatever we want with them
+    # TODO: Enter calculation loop. Root will also do this
+    # TODO: use Isend to return the results to root
 
 def main(param_loc):
     # Get our MPI communicator, our rank, and the world size.
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    data = np.load(param_loc)
-    keys = data['keys']
-    inputs = data['inputs']
-
     if rank == 0:
-        return root(comm, keys, inputs)
+        return root(comm, param_loc)
     else:
-        return nonroot(comm, keys, len(inputs))
+        return nonroot(comm)
     
 if __name__ == "__main__":
     # Get the parameter location from the command line
