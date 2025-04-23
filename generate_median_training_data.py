@@ -150,73 +150,22 @@ def generate_correlations_parallel(model, rbins, halocat):
     
     return results
 
-def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, save_every=5, 
-                           param_loc="params.npz", output_dir="data", suffix=""):
-    inputs = []
-    outputs = {}
+def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attempts):
+    # Adjust model params
+        for key in input_dict.keys():
+            model.param_dict[key] = input_dict[key]
 
-    # Get the section of the full logMmin to run
-    # span = int(np.ceil(Npts/max_jobs))
-    # start = (job-1)*span
-    # end = start+span
-
-    # Get values
-    param_arr = np.load(param_loc, allow_pickle=True)
-    all_inputs = param_arr["values"]
-    usable_inputs = all_inputs[job-1::max_jobs]                                 # Only access every max_jobs-th value
-
-    start = time.time()
-
-    start_point = 0
-    if os.path.exists( os.path.join( output_dir, f"inputs_{suffix}.npy" ) ):
-        inputs = np.load( os.path.join( output_dir, f"inputs_{suffix}.npy" ), allow_pickle=True ).tolist()
-        outputs = np.load( os.path.join( output_dir, f"outputs_{suffix}.npy" ), allow_pickle=True ).item()
-        start_point = len(inputs)
-        print("Loaded existing data")
-
-    keys = np.array(['central_alignment_strength', 'satellite_alignment_strength',
-                        'logMmin', 'sigma_logM', 'logM0', 'logM1', 'alpha'])
-
-    ind = len(inputs)
-    max_attempts = 5        # Maximum number of times to build a model without nans before giving up and moving on
-
-    # If the latest run didn't finish, start one run earlier
-    fresh_run = True
-    if len(inputs) != 0 and len(outputs[ tuple(inputs[-1]) ]) < inner_runs:
-        fresh_run = False
-        start_point -= 1
-
-    for i in range(len(usable_inputs))[start_point:]:
-        print(f"Starting {i}")
-
-        # Add to the inputs list
-        if fresh_run:
-            # Only append if we are starting from scratch
-            inputs.append( usable_inputs[i] )
-        else:
-            # If the inputs are already included, don't append again
-            # Do set fresh_run to True so that we don't skip the next set of parameters
-            fresh_run = True
-
-        inner_adjust = 0
-
-        # If this is a new set, add an empty list to the outputs
-        if not tuple( usable_inputs[i] ) in outputs.keys():
-            outputs[ tuple( usable_inputs[i] ) ] = []
-        else:
-            # Otherwise, see how many we've done already and use that to lessen the remaining number of inner runs
-            inner_adjust = len(outputs[ tuple( usable_inputs[i] ) ])
-        
-        # If we've somehow already done as many as needed, skip this set of parameters
-        if inner_adjust >= inner_runs:
-            continue
-
-        # Adjust model params
-        for j in range(len(keys)):
-            model.param_dict[keys[j]] = usable_inputs[i][j]             # Since values are stored in the same order as the keys, this works
+        # Build empty array to hold the results
+        # Full array is Nxmxcxb
+        # N = number of different inputs
+        # m = number of different runs
+        # c = number of different correlation functions (3)
+        # b = number of different bins
+        # In this function, we're only working with a single set of inputs, so we need mxcxb
+        outputs = np.zeros( (runs, 3, len(rbins)-1) )
 
         # Repopulate and sample
-        for j in range(inner_runs-inner_adjust):
+        for i in range(runs):
             try:
                 repeat = True
                 attempt = 0
@@ -231,82 +180,151 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
                     # Check for nans
                     repeat = ( any( np.isnan(results[0]) ) or any( np.isnan(results[1]) ) or any( np.isnan(results[2]) ) )
 
-                outputs[ tuple(usable_inputs[i]) ].append( results )
+                outputs[i] = results
 
-                if i % save_every == 0:
-                    np.save( os.path.join( output_dir, f"inputs_{suffix}.npy" ), inputs)
-                    np.save( os.path.join( output_dir, f"outputs_{suffix}.npy" ), outputs)
             except:
-                print(f"Failed on {i}")
+                print(f"Failed on {input_dict}")
+                return np.zeros(outputs.shape)              # Return all zeros in the case of a catastophic failure
 
-        print(f"{ind} - {time.time()-start}")
-        ind += 1
+            return outputs
+
+def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, save_every=5, 
+                           param_loc="params.npz", output_dir="data", suffix="", max_attempts=5):
+    """
+    Generate training data using a particular model instance and halo cat, assuming one of several slurm jobs being run.
+
+    Parameters
+    ----------
+    model : HodModelFactory
+        The model instance to use for generating the data.
+    rbins : array_like
+        The radial bins to use for the correlation functions.
+    job : int
+        The job number for the slurm job.
+    max_jobs : int
+        The total number of slurm jobs being run.
+    halocat : CachedHaloCatalog
+        The halo catalog to use for generating the data.
+    inner_runs : int, optional
+        The number of times to run the model for each set of parameters. Default is 10.
+    save_every : int, optional
+        The number of iterations to run before saving the data. Default is 5.
+    param_loc : str, optional
+        The location of the input parameter file. Default is "params.npz".
+    output_dir : str, optional
+        The location to save the output data (along with a copy of the inputs used for this particular section). Default is "data".
+    suffix : str, optional
+        A suffix to add to the output file names. Default is "".
+    max_attempts : int, optional
+        The maximum number of attempts to run the model for each set of parameters. Default is 5. If the model fails to run after 
+        this many attempts, proceed with caution.
+
+    Returns
+    -------
+    keys : array_like
+        The keys used for the input parameters.
+    inputs : array_like
+        The input parameters used for generating the data.
+    outputs : array_like - shape (N, inner_runs, 3, len(rbins)-1)
+        The output data generated by the model.
+    """
+
+    # Get the section of the full logMmin to run
+    # span = int(np.ceil(Npts/max_jobs))
+    # start = (job-1)*span
+    # end = start+span
+
+    # Get values
+    param_arr = np.load(param_loc, allow_pickle=True)
+    all_inputs = param_arr["values"]
+    usable_inputs = all_inputs[job-1::max_jobs]                                 # Only access every max_jobs-th value
+
+    # Make an empty array for the outputs (inputs kept as a list to keep track of progress)
+    inputs = []
+    outputs = np.zeros((len(usable_inputs), inner_runs, 3, len(rbins)-1))
+
+    start_point = 0
+    if os.path.exists( os.path.join( output_dir, f"full_run_{suffix}.npz" ) ):
+        data = np.load( os.path.join( output_dir, f"full_run{suffix}.npz" ), allow_pickle=True )
+        inputs = data["inputs"].tolist()
+        outputs = data["outputs"]
+        start_point = len(inputs)
+        print("Loaded existing data")
+
+    keys = np.array(['central_alignment_strength', 'satellite_alignment_strength',
+                        'logMmin', 'sigma_logM', 'logM0', 'logM1', 'alpha'])
+
+    for i in range(len(usable_inputs))[start_point:]:
+        print(f"Starting {i}")
+
+        inputs.append( usable_inputs[i] )
+
+        inputs = {keys[j]: usable_inputs[i][j] for j in range(len(keys))}
+        results = calculate_all_iterations(model, rbins, halocat, inner_runs, inputs, max_attempts)
+        outputs[i] = results
+
+        if i % save_every == 0:
+            np.savez( os.path.join( output_dir, f"full_run_{suffix}.npz" ), keys=keys, inputs=inputs, outputs=outputs )
 
     return keys, np.array(inputs), outputs
 
-############################################################################################################################
-##### SET UP VARIABLES #####################################################################################################
-############################################################################################################################
+if __name__ == "__main__":
 
-# Administrative variables
-assert len(sys.argv) == 3, "Must provide job number and max jobs"
-job = int(sys.argv[1])
-max_jobs = int(sys.argv[2])
+    ############################################################################################################################
+    ##### SET UP VARIABLES #####################################################################################################
+    ############################################################################################################################
 
-############################################################################################################################
-# MODEL PARAMETERS #########################################################################################################
-############################################################################################################################
-inner_runs = 10
-constant = True
-catalog = "bolplanck"
-#catalog = "multidark"
-# Set rbins - Larger max distance means longer run time (from correlation calculations)
-rbins = np.logspace(-1,1.2,21)
-#rbins = np.logspace(-1,1.8,29)
-rbin_centers = (rbins[:-1]+rbins[1:])/2.0
+    # Administrative variables
+    assert len(sys.argv) == 3, "Must provide job number and max jobs"
+    job = int(sys.argv[1])
+    max_jobs = int(sys.argv[2])
 
-param_f_name = "params.npz"                # Location of the input parameter file
-output_dir = "results"                     # Location to save the output data
+    ############################################################################################################################
+    # MODEL PARAMETERS #########################################################################################################
+    ############################################################################################################################
+    inner_runs = 10
+    constant = True
+    catalog = "bolplanck"
+    #catalog = "multidark"
+    # Set rbins - Larger max distance means longer run time (from correlation calculations)
+    rbins = np.logspace(-1,1.2,21)
+    #rbins = np.logspace(-1,1.8,29)
+    rbin_centers = (rbins[:-1]+rbins[1:])/2.0
 
-############################################################################################################################
+    param_f_name = "params.npz"                # Location of the input parameter file
+    output_dir = "results"                     # Location to save the output data
 
-# Initial strength parameters
-# These don't matter, as they are only needed for the initial creation of the model
-central_alignment_strength = 1
-satellite_alignment_strength = 1
+    ############################################################################################################################
 
-# Satellite bins
-sat_bins = np.logspace(10.5, 15.2, 15)
-if catalog == "multidark":
-    sat_bins = np.logspace(12.4, 15.5, 15)
+    # Initial strength parameters
+    # These don't matter, as they are only needed for the initial creation of the model
+    central_alignment_strength = 1
+    satellite_alignment_strength = 1
 
-# Set up halocat
-halocat = CachedHaloCatalog(simname=catalog, halo_finder='rockstar', redshift=0, version_name='halotools_v0p4')
-mask_bad_halocat(halocat)
+    # Satellite bins
+    sat_bins = np.logspace(10.5, 15.2, 15)
+    if catalog == "multidark":
+        sat_bins = np.logspace(12.4, 15.5, 15)
 
-start = time.time()
+    # Set up halocat
+    halocat = CachedHaloCatalog(simname=catalog, halo_finder='rockstar', redshift=0, version_name='halotools_v0p4')
+    mask_bad_halocat(halocat)
 
-suffix = ("constant" if constant else "distance_dependent") + "_" + catalog + ("_"+str(job) if not job is None else "")
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+    start = time.time()
 
-# Build model instance
-model = build_model_instance(central_alignment_strength, satellite_alignment_strength, sat_bins, 
-                            halocat, constant=constant, seed=None)
+    suffix = ("constant" if constant else "distance_dependent") + "_" + catalog + ("_"+str(job) if not job is None else "")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-# Generate Data
-keys, inputs, outputs = generate_training_data(model, rbins, job, max_jobs, halocat, 
-                                        inner_runs=inner_runs, save_every=5, param_loc="../100X_Data/params.npz", output_dir=output_dir, suffix=suffix)
+    # Build model instance
+    model = build_model_instance(central_alignment_strength, satellite_alignment_strength, sat_bins, 
+                                halocat, constant=constant, seed=None)
 
-# Save data, making sure to account for this script being run on multiple jobs
-np.save( os.path.join( output_dir, f"inputs_{suffix}.npy" ), inputs)
-np.save( os.path.join( output_dir, f"outputs_{suffix}.npy" ), outputs)
+    # Generate Data
+    keys, inputs, outputs = generate_training_data(model, rbins, job, max_jobs, halocat, 
+                                            inner_runs=inner_runs, save_every=5, param_loc="../100X_Data/params.npz", output_dir=output_dir, suffix=suffix)
 
-# if job is None or job == 1:
-#     summary_file = open( os.path.join( output_dir, f"summary_{suffix}.txt" ), "w" )
-#     for key in parameters.keys():
-#         summary_file.write( f"{key}: {parameters[key]}\n" )
-#     summary_file.write( f"Time: {time.time()-start}\n" )
-#     summary_file.close()
+    # Save data, making sure to account for this script being run on multiple jobs
+    np.savez( os.path.join( output_dir, f"full_run_{suffix}.npz" ), keys=keys, inputs=inputs, outputs=outputs )
 
-print("Time: ", time.time()-start,"\n")
+    print("Time: ", time.time()-start,"\n")
