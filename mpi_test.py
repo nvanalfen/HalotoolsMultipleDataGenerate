@@ -79,7 +79,7 @@ def mpi_root(mpi_comm):
         # Send the inputs to the rank
         sendbuf = ins[start_ind:end_ind]
         print("Rank {}:  I am rank {} and I will send rank {} inputs:\n{}".format(mpi_comm.Get_rank(), 0, i, sendbuf), flush=True)
-        req = mpi_comm.ISend(sendbuf, dest=i, tag=0)
+        req = mpi_comm.Isend(sendbuf, dest=i, tag=0)
         requests.append(req)
 
     # Wait for all sends to complete
