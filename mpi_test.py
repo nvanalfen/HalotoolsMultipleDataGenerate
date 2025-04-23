@@ -113,7 +113,7 @@ def mpi_nonroot(mpi_comm):
     print('Rank {}:  I am a non-root rank!'.format(mpi_comm.Get_rank()), flush=True)
 
     # Gather the size of the input array from the root Bcast
-    shape = np.empty(2)
+    shape = np.empty(2, dtype=int)
     mpi_comm.Bcast(shape, root=0)
     print("Rank {}: {}, {}, {}, {}".format(mpi_comm.Get_rank(), shape, mpi_rank, 1, mpi_comm.Get_size()-1), flush=True)
     start_ind, end_ind, cols = determine_size(shape, mpi_rank, lowest_rank=1, highest_rank=mpi_comm.Get_size()-1)
