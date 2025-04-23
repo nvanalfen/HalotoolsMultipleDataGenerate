@@ -64,7 +64,8 @@ def mpi_root(mpi_comm):
     print(ins, flush=True)
 
     # Broadcast the input shape to all ranks
-    mpi_comm.Bcast(ins.shape, root=0)
+    shape = np.array(ins.shape)
+    mpi_comm.Bcast(shape, root=0)
 
     rank_ownership = {}
 
