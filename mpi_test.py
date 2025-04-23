@@ -4,10 +4,20 @@ import numpy as np
 
 # A dummy test based on the mpi example in https://github.com/akkornel/mpi4py/blob/master/mpi4.py
 
-# The input array will be global so there's no need to broadcast it
-ins = np.ones((15, 3)).astype(float)
-values = np.arange(len(ins)).astype(float)
-ins *= values[:, np.newaxis]
+def determine_size(shape, rank, lowest_rank=1, highest_rank=1):
+    rows, cols = shape
+    # split up the indices by which rank will be in charge
+    chunk_size = int(rows // (highest_rank - lowest_rank + 1))
+
+    assert rank >= lowest_rank, "Rank must be greater than lowest rank"
+
+    start = (rank - lowest_rank) * chunk_size
+    end = min(start + chunk_size, rows)
+
+    # If this is the last rank, it will take care of the rest of the rows
+    if rank == highest_rank:
+        end = rows
+    return start, end, cols
 
 def main() -> int:
     # This function is the exact same as the main in the example code. Pretty simple and easy. I like it.
@@ -36,11 +46,16 @@ def main() -> int:
 
     # Call the appropriate function, based on our rank
     if mpi_rank == 0:
-        return mpi_root(mpi_comm, len(ins))
+        return mpi_root(mpi_comm)
     else:
-        return mpi_nonroot(mpi_comm, len(ins))
+        return mpi_nonroot(mpi_comm)
 
-def mpi_root(mpi_comm, size):
+def mpi_root(mpi_comm):
+
+    # The input array will be global so there's no need to broadcast it
+    ins = np.ones((15, 3)).astype(float)
+    values = np.arange(len(ins)).astype(float)
+    ins *= values[:, np.newaxis]
 
     # Print the input array
     print('Rank {}:  I am the root rank!'.format(mpi_comm.Get_rank()), flush=True)
@@ -48,37 +63,47 @@ def mpi_root(mpi_comm, size):
     print("Rank {}: Inputs:".format(mpi_comm.Get_rank()), flush=True)
     print(ins, flush=True)
 
-    # Broadcast the inputs to all ranks
-    mpi_comm.Bcast(ins, root=0)
+    # Broadcast the input shape to all ranks
+    mpi_comm.Bcast(ins.shape, root=0)
 
-    # Gather responses
-    sendbuf = np.empty((0, 3), dtype=float)
-    recvbuf_arr = np.empty([size, 3], dtype=float)
-    sendcounts = mpi_comm.gather(0, root=0)
-    displs = [0] + list(np.cumsum(sendcounts[:-1]))
-    recvbuf = (recvbuf_arr, sendcounts, displs, MPI.DOUBLE)
-    mpi_comm.Gatherv(sendbuf, recvbuf, root=0)
+    rank_ownership = {}
 
-    # # Did we get all responses?
-    mpi_size = mpi_comm.Get_size()
-    # if len(recvbuf) != mpi_size:
-    #     print('Rank {}:  I did not get all responses!'.format(mpi_comm.Get_rank()), flush=True)
-    #     print('Rank {}:  I got {} responses, but expected {}!'.format(mpi_comm.Get_rank(), len(recvbuf), mpi_size), flush=True)
-    #     return 1
-    
-    # Output each rank's response
-    for i in range(mpi_size):
-        if i == 0:
-            print("Rank {}:  I am rank 0", flush=True)
-        else:
-            print("Rank {}:  I got a response from rank {}".format(mpi_comm.Get_rank(), i), flush=True)
-    print("Rank {}:  The responses are:".format(mpi_comm.Get_rank()), flush=True)
-    print(recvbuf[0], flush=True)
+    # Send the chunked inputs to each rank
+    requests = []
+    for i in range(1, mpi_comm.Get_size()):
+        # Get the start and end indices for this rank
+        start_ind, end_ind, cols = determine_size(ins.shape, i, lowest_rank=1, highest_rank=mpi_comm.Get_size()-1)
+        rank_ownership[i] = (start_ind, end_ind)
+
+        # Send the inputs to the rank
+        sendbuf = ins[start_ind:end_ind]
+        print("Rank {}:  I am rank {} and I will send rank {} inputs:\n{}".format(mpi_comm.Get_rank(), 0, i, sendbuf), flush=True)
+        req = mpi_comm.ISend(sendbuf, dest=i, tag=0)
+        requests.append(req)
+
+    # Wait for all sends to complete
+    MPI.Request.Waitall(requests)
+    print("Rank {}:  I am rank {} and I sent all inputs!".format(mpi_comm.Get_rank(), 0), flush=True)
+
+    # TODO
+
+    results = np.zeros(ins.shape, dtype=float)
+    requests = []
+    for i in range(1, mpi_comm.Get_size()):
+        start_ind, end_ind = rank_ownership[i]
+        buffer = results[start_ind:end_ind]
+        req = mpi_comm.Irecv(buffer, source=i, tag=i)
+        requests.append(req)
+
+    # Wait for all receives to complete
+    MPI.Request.Waitall(requests)
+    print("Rank {}:  I am rank {} and I received all responses!".format(mpi_comm.Get_rank(), 0), flush=True)
+    print("Responses:\n", results, flush=True)
 
     return 0
     
 
-def mpi_nonroot(mpi_comm, size):
+def mpi_nonroot(mpi_comm):
     # Get our MPI rank.
     # This is a unique number, in the range [0, MPI_size), which identifies us
     # in this MPI world.
@@ -86,23 +111,26 @@ def mpi_nonroot(mpi_comm, size):
 
     print('Rank {}:  I am a non-root rank!'.format(mpi_comm.Get_rank()), flush=True)
 
-    # Wait for the inputs
-    ins = np.empty((size, 3), dtype=float)
-    mpi_comm.Bcast(ins, root=0)
+    # Gather the size of the input array from the root Bcast
+    shape = np.empty(1, dtype=int)
+    mpi_comm.Bcast(shape, root=0)
+    start_ind, end_ind, cols = determine_size(shape, mpi_rank, lowest_rank=1, highest_rank=mpi_comm.Get_size()-1)
+    print("Rank {}: taking care of inputs {} to {}".format(mpi_comm.Get_rank(), start_ind, end_ind), flush=True)
 
-    # Only grab the porton of the inputs corresponding to what this rank is responsible for
-    # This will simulate the MPI ranks taking care of different parts of the input
-    chunk_size = int(np.ceil(len(ins) / (mpi_comm.Get_size()-1) ))          # Master rank is not involved
-    start = (mpi_rank-1) * chunk_size
-    end = min(start + chunk_size, size)
-    print("Rank {}: taking care of inputs {} to {}".format(mpi_comm.Get_rank(), start, end), flush=True)
+    rows = end_ind - start_ind
+
+    # Wait for the inputs
+    ins = np.empty((rows, cols), dtype=float)
+    req = mpi_comm.Irecv(ins, source=0, tag=0)
+    req.Wait()
+    print("Rank {}:  I am rank {} and I received inputs:\n{}".format(mpi_comm.Get_rank(), mpi_rank, ins), flush=True)
+
+    # Perform trivial calculation
+    ins *= 2.5
 
     # Return the rows we are responsible for
-    sendbuf = np.array(ins[start:end])*2.5
-    print("Rank {}:  I am rank {} and I will send a response:\n{}".format(mpi_comm.Get_rank(), mpi_rank, sendbuf), flush=True)
-    sendcounts = mpi_comm.gather((end-start)*3, root=0)
-    recvbuf = (None, sendcounts, None, MPI.DOUBLE)
-    mpi_comm.Gatherv(sendbuf, None, root=0)
+    print("Rank {}:  I am rank {} and I will send a response:\n{}".format(mpi_comm.Get_rank(), mpi_rank, ins), flush=True)
+    mpi_comm.Isend(ins, dest=0, tag=mpi_rank)
 
     return 0
 
