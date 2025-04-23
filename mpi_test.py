@@ -121,7 +121,7 @@ def mpi_nonroot(mpi_comm):
     rows = end_ind - start_ind
 
     # Wait for the inputs
-    ins = np.empty((rows, cols), dtype=float)
+    ins = np.zeros((rows, cols), dtype=float)
     req = mpi_comm.Irecv(ins, source=0, tag=0)
     req.Wait()
     print("Rank {}:  I am rank {} and I received inputs:\n{}".format(mpi_comm.Get_rank(), mpi_rank, ins), flush=True)
