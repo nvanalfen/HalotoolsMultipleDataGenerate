@@ -186,7 +186,7 @@ def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attemp
                 print(f"Failed on {input_dict}")
                 return np.zeros(outputs.shape)              # Return all zeros in the case of a catastophic failure
 
-            return outputs
+        return outputs
 
 def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, save_every=5, 
                            param_loc="params.npz", output_dir="data", suffix="", max_attempts=5):
@@ -245,7 +245,7 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
 
     start_point = 0
     if os.path.exists( os.path.join( output_dir, f"full_run_{suffix}.npz" ) ):
-        data = np.load( os.path.join( output_dir, f"full_run{suffix}.npz" ), allow_pickle=True )
+        data = np.load( os.path.join( output_dir, f"full_run_{suffix}.npz" ), allow_pickle=True )
         inputs = data["inputs"].tolist()
         outputs = data["outputs"]
         start_point = len(inputs)
@@ -257,10 +257,9 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
     for i in range(len(usable_inputs))[start_point:]:
         print(f"Starting {i}")
 
-        inputs.append( usable_inputs[i] )
-
         input_dict = {keys[j]: usable_inputs[i][j] for j in range(len(keys))}
         results = calculate_all_iterations(model, rbins, halocat, inner_runs, input_dict, max_attempts)
+        inputs.append( usable_inputs[i] )
         outputs[i] = results
 
         if i % save_every == 0:
