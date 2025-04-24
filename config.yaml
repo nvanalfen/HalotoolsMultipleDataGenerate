@@ -1,6 +1,6 @@
 # File parameters
 param_loc: test_params.npz
-output: results.npz
+output: results/results.npz
 checkpoint_dir: results/checkpoints/
 
 # Array parameters
