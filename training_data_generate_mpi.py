@@ -106,7 +106,7 @@ def root(comm, param_loc):
 
     data = np.load(param_loc)
     keys = data['keys']
-    inputs = data['inputs']
+    inputs = data['values']
 
     # Send the keys to all ranks
     broadcast_keys(comm, keys)
