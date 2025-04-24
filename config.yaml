@@ -1,0 +1,39 @@
+# File parameters
+param_loc: test_params.npz
+output: results.npz
+checkpoint_dir: results/checkpoints/
+
+# Array parameters
+# method: logspace, file, list
+# args:
+#   - logspace: [start, stop, num points] for np.logspace(start, stop, num points)
+#   - file: IGNORED
+#   - list: [list of values]
+# path:
+#   - logspace: IGNORED
+#   - file: path to read array from
+#   - list: IGNORED
+rbins:
+  method: logspace
+  args: [-1, 1.2, 21]   # start, stop, num points
+  path: null            # path to read array from if method = file
+
+sat_bins:
+  method: logspace
+  args: [10.5, 15.2, 15]   # start, stop, num points
+  path: null
+
+# Halocatalog parameters
+catalog: "bolplanck"
+halo_finder: "rockstar"
+redshift: 0.0
+version_name: "halotools_v0p4"
+
+# Model instance parameters
+constant_alignment_strength: true       # If true, all centrals share a central_alignment_strength and all satellites share a satellite_alignment_strength
+seed: null                              # Seed for population
+
+# data_generation parameters
+runs: 10                                # Number of iterations for each input
+max_attempts: 5                         # Number of attempts for each run to try in case of nans (will retry if nans are found)
+save_every: 5                           # Save every set of n inputs (all or none on the iterations)

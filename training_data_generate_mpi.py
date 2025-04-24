@@ -1,7 +1,10 @@
 from mpi4py import MPI
 import os
 import numpy as np
+from halotools.sim_manager import CachedHaloCatalog
+from generate_median_training_data import build_model_instance
 from generate_median_training_data import calculate_all_iterations
+from data_utils import load_yaml_config
 
 def atomic_save(filename, data_dict):
     """
@@ -11,6 +14,57 @@ def atomic_save(filename, data_dict):
     temp_filename = filename + ".tmp"
     np.savez(temp_filename, **data_dict)
     os.rename(temp_filename+".npz", filename+".npz")
+
+def clear_checkpoints(config):
+    # TODO: Delete all checkpoint files
+    # Only call this after the output file has been saved
+    pass
+
+def run_generation(config, keys, inputs):
+    """
+    Run the generation of training data.
+    This function will unpack configuration file and set up the parameters for the training data generation.
+    """
+
+    model, halocat = setup_generation(config)
+    rbins = config['rbins']
+    runs = config['runs']
+    max_attempts = config['max_attempts']
+    save_every = config['save_every']
+    output = config['output']
+
+    _, _, outputs = generate_training_data(model, rbins, halocat, keys, inputs,
+                                                   inner_runs=runs, save_every=save_every,
+                                                   output_dir=output, suffix="",
+                                                   max_attempts=max_attempts)
+    
+    return outputs
+
+def setup_generation(config):
+    """
+    Setup the generation of training data.
+    This function will unpack configuration file and set up the parameters for the training data generation.
+    """
+
+    # Build halocat
+    catalog = config['catalog']
+    halo_finder = config['halo_finder']
+    redshift = config['redshift']
+    version_name = config['version_name']
+
+    halocat = CachedHaloCatalog(simname=catalog, redshift=redshift,
+                                halo_finder=halo_finder, version_name=version_name)
+    
+    # Build the model instance
+    sat_bins = config['sat_bins']
+    constant_alignment_strength = config['constant_alignment_strength']
+    seed = config['seed']
+
+    # Build the model
+    # pass in 1.0 for both alignment strengths since this will be overwritten anyway
+    model = build_model_instance(1.0, 1.0, sat_bins, halocat, constant=constant_alignment_strength, seed=seed)
+
+    return model, halocat
 
 def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=10, save_every=5, 
                            output_dir="checkpoints", suffix="", max_attempts=5):
@@ -51,6 +105,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=1
             print(f"Rank {rank} failed on input {input_dict}: {e}")
 
         # Save the outputs every save_every iterations
+        # Only save after full chunks of inputs. All or nothing on the iterations within an input
         if (i + 1) % save_every == 0:
             atomic_save(checkpoint_file, {'keys':keys, 'inputs': inputs, 'outputs': outputs})
 
@@ -104,9 +159,13 @@ def receive_keys(comm):
 
 def root(comm, param_loc):
 
-    data = np.load(param_loc)
+    config = load_yaml_config(param_loc)
+    data = np.load(  config['param_loc'], allow_pickle=True)
     keys = data['keys']
     inputs = data['values']
+
+    # Broadcast config to all ranks
+    comm.bcast(config, root=0)
 
     # Send the keys to all ranks
     broadcast_keys(comm, keys)
@@ -134,31 +193,39 @@ def root(comm, param_loc):
     start_ind, end_ind, cols = determine_size(input_shape, 0, 0, comm.Get_size()-1)
     root_inputs = inputs[start_ind:end_ind]
 
+    # Allocate the full output array
+    # Shape of Nxmx3xlen(rbins)-1
+    outputs = np.zeros((input_shape[0], config['runs'], 3, len(config['rbins'])-1), dtype=float)
+
     # TODO: Enter calculation loop. Non-root ranks will also do this
+    outputs[start_ind:end_ind] = run_generation(config, keys, root_inputs)
 
     # TODO: use Irecv to receive the results from non-root ranks
-
-    # For now, just regather the inputs from all ranks
-    re_inputs = np.zeros((input_shape[0], input_shape[1]), dtype=float)
-    re_inputs[start_ind:end_ind] = root_inputs
     requests = []
     for i in range(1, comm.Get_size()):
         start_ind, end_ind = rank_ownership[i]
         # Receive the inputs from the rank
-        buffer = re_inputs[start_ind:end_ind]
+        buffer = outputs[start_ind:end_ind]
         req = comm.Irecv(buffer, source=i, tag=0)
         requests.append(req)
 
     # Wait for all receives to complete
     MPI.Request.Waitall(requests)
 
-    # Compare inputs and re_inputs, they should be the exact same
-    print("Rank 0: Inputs and re_inputs are the same: ", np.array_equal(inputs, re_inputs), flush=True)
+    # Save the outputs to a file
+    output_f_name = config["output"]
+    np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs)
+    print(f"Rank {comm.Get_rank()} saved outputs to {output_f_name}", flush=True)
+
+    # TODO: Clean up checkpoint files
 
     return 0
 
 def nonroot(comm):
     rank = comm.Get_rank()
+
+    # Receive the config from root
+    config = comm.bcast(None, root=0)
 
     # Receive the keys from root
     keys = receive_keys(comm)
@@ -182,10 +249,9 @@ def nonroot(comm):
 
     # Now we have the inputs, we can do whatever we want with them
     # TODO: Enter calculation loop. Root will also do this
+    outputs = run_generation(config, keys, inputs)
     # TODO: use Isend to return the results to root
-
-    # For now, just return the inputs to root
-    req = comm.Isend(inputs, dest=0, tag=0)
+    req = comm.Isend(outputs, dest=0, tag=0)
     req.Wait()
 
     # close and end
@@ -204,7 +270,7 @@ def main(param_loc):
 if __name__ == "__main__":
     # Get the parameter location from the command line
     import sys
-    param_loc = sys.argv[1]
+    config_loc = sys.argv[1]
 
     # Call the main function
-    sys.exit( main(param_loc) )
+    sys.exit( main(config_loc) )
