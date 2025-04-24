@@ -70,10 +70,10 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
                            output_dir="checkpoints", suffix="", max_attempts=5):
 
     # Create an empty input list and output array
-    # The shape of the output array is (number of inputs, number of inner runs, 3, number of rbins)
+    # The shape of the output array is (number of inputs, number of inner runs, 3, number of rbin_centers)
     # The 3 corresponds to the three different correlation functions
     inputs = []
-    outputs = np.zeros((len(all_inputs), runs, 3, len(rbins)))
+    outputs = np.zeros((len(all_inputs), runs, 3, len(rbins)-1))
     start_index = 0
 
     # check if a checkpoint file exists for this rank (i.e. if this is picking up from a previous run)
