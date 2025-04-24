@@ -138,6 +138,25 @@ def root(comm, param_loc):
 
     # TODO: use Irecv to receive the results from non-root ranks
 
+    # For now, just regather the inputs from all ranks
+    re_inputs = np.zeros((input_shape[0], input_shape[1]), dtype=float)
+    re_inputs[start_ind:end_ind] = root_inputs
+    requests = []
+    for i in range(1, comm.Get_size()):
+        start_ind, end_ind, cols = rank_ownership[i]
+        # Receive the inputs from the rank
+        buffer = re_inputs[start_ind:end_ind]
+        req = comm.IRecv(buffer, source=i, tag=0)
+        requests.append(req)
+
+    # Wait for all receives to complete
+    MPI.Request.Waitall(requests)
+
+    # Compare inputs and re_inputs, they should be the exact same
+    print("Rank 0: Inputs and re_inputs are the same: ", np.array_equal(inputs, re_inputs), flush=True)
+
+    return 0
+
 def nonroot(comm):
     rank = comm.Get_rank()
 
@@ -161,6 +180,13 @@ def nonroot(comm):
     # Now we have the inputs, we can do whatever we want with them
     # TODO: Enter calculation loop. Root will also do this
     # TODO: use Isend to return the results to root
+
+    # For now, just return the inputs to root
+    req = comm.Isend(inputs, dest=0, tag=0)
+    req.Wait()
+
+    # close and end
+    return 0
 
 def main(param_loc):
     # Get our MPI communicator, our rank, and the world size.
