@@ -143,10 +143,10 @@ def root(comm, param_loc):
     re_inputs[start_ind:end_ind] = root_inputs
     requests = []
     for i in range(1, comm.Get_size()):
-        start_ind, end_ind, cols = rank_ownership[i]
+        start_ind, end_ind = rank_ownership[i]
         # Receive the inputs from the rank
         buffer = re_inputs[start_ind:end_ind]
-        req = comm.IRecv(buffer, source=i, tag=0)
+        req = comm.Irecv(buffer, source=i, tag=0)
         requests.append(req)
 
     # Wait for all receives to complete
@@ -176,7 +176,7 @@ def nonroot(comm):
     # Create a buffer to hold the inputs
     inputs = np.empty((rows, cols), dtype=float)
     # Receive the inputs from root
-    req = comm.IRecv(inputs, source=0, tag=0)
+    req = comm.Irecv(inputs, source=0, tag=0)
     req.Wait()
     print(f"Rank {rank} received inputs: {inputs}", flush=True)
 
