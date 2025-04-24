@@ -90,7 +90,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=1
     # Loop over the inputs
     for i in range(len(all_inputs))[start_index:]:
         # Get the input for this iteration
-        input_dict = {key: all_inputs[key][i] for key in keys}
+        input_dict = {keys[i]: all_inputs[i] for i in range(len(keys))}
         inputs.append(input_dict)
 
         # Calculate the outputs for this input
