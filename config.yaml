@@ -34,7 +34,7 @@ constant_alignment_strength: true       # If true, all centrals share a central_
 seed: null                              # Seed for population
 
 # data_generation parameters
-runs: 10                                # Number of iterations for each input
+runs: 2                                # Number of iterations for each input
 max_attempts: 5                         # Number of attempts for each run to try in case of nans (will retry if nans are found)
 save_every: 5                           # Save every set of n inputs (all or none on the iterations)
 
