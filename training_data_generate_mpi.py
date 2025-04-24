@@ -1,4 +1,3 @@
-from mpi4py import MPI
 import os
 import numpy as np
 import multiprocessing as mp
@@ -264,9 +263,6 @@ def nonroot(comm):
     return 0
 
 def main(param_loc):
-    # Spawn for safe multiprocessing on each rank
-    mp.set_start_method("spawn", force=True)
-
     # Get our MPI communicator, our rank, and the world size.
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -278,9 +274,22 @@ def main(param_loc):
     
 if __name__ == "__main__":
 
-    # Get the parameter location from the command line
+    # Get the config location from the command line
     import sys
     config_loc = sys.argv[1]
+
+    spawn = False
+    if len(sys.argv) > 2:
+        spawn = bool(int(sys.argv[2]))
+
+    if spawn:
+        # Spawn for safe multiprocessing on each rank
+        mp.set_start_method("spawn", force=True)
+    else:
+        # Fork for faster multiprocessing on each rank
+        mp.set_start_method("fork", force=True)
+
+    from mpi4py import MPI
 
     # Call the main function
     sys.exit( main(config_loc) )
