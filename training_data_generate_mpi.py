@@ -38,6 +38,8 @@ def run_generation(config, keys, inputs):
                                                    output_dir=output, suffix="",
                                                    max_attempts=max_attempts)
     
+    print(f"Rank {MPI.COMM_WORLD.Get_rank()} finished generation", flush=True)
+    
     return outputs
 
 def setup_generation(config):
@@ -89,6 +91,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
     
     # Loop over the inputs
     for i in range(len(all_inputs))[start_index:]:
+        print(f"Rank {rank} processing input {i+1}/{len(all_inputs)}", flush=True)
         # Get the input for this iteration
         input_dict = {keys[j]: all_inputs[i][j] for j in range(len(keys))}
         inputs.append(input_dict)
