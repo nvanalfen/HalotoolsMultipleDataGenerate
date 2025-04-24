@@ -95,7 +95,7 @@ def correlate(row):
     func, args, kwargs = row
     return func(*args, **kwargs)
 
-def generate_correlations_parallel(model, rbins, halocat):
+def generate_correlations_parallel(model, rbins, halocat, processes=3):
     gal_table = model.mock.galaxy_table
     cen_cut = gal_table[ gal_table["gal_type"] == "centrals" ]
     sat_cut = gal_table[ gal_table["gal_type"] == "satellites" ]
@@ -145,12 +145,12 @@ def generate_correlations_parallel(model, rbins, halocat):
             # ( ee_3d, (sat_coords, sat_orientations, cen_coords, cen_orientations, rbins), {"period":halocat.Lbox} )
             ]
     
-    with mp.Pool() as pool:
+    with mp.Pool(processes=processes) as pool:
         results = pool.map(correlate, func_params)
     
     return results
 
-def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attempts):
+def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attempts, processes=3):
     # Adjust model params
         for key in input_dict.keys():
             model.param_dict[key] = input_dict[key]

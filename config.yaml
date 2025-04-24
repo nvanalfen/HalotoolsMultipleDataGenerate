@@ -37,3 +37,6 @@ seed: null                              # Seed for population
 runs: 10                                # Number of iterations for each input
 max_attempts: 5                         # Number of attempts for each run to try in case of nans (will retry if nans are found)
 save_every: 5                           # Save every set of n inputs (all or none on the iterations)
+
+# Other parameters
+processes: 3                            # Number of processes to use for multiprocessing

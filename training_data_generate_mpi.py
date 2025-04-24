@@ -1,6 +1,7 @@
 from mpi4py import MPI
 import os
 import numpy as np
+import multiprocessing as mp
 from halotools.sim_manager import CachedHaloCatalog
 from generate_median_training_data import build_model_instance
 from generate_median_training_data import calculate_all_iterations
@@ -32,11 +33,13 @@ def run_generation(config, keys, inputs):
     max_attempts = config['max_attempts']
     save_every = config['save_every']
     output = config['output']
+    processes = config['processes']
 
     _, _, outputs = generate_training_data(model, rbins, halocat, keys, inputs,
                                                    runs=runs, save_every=save_every,
                                                    output_dir=output, suffix="",
-                                                   max_attempts=max_attempts)
+                                                   max_attempts=max_attempts,
+                                                   processes=processes)
     
     print(f"Rank {MPI.COMM_WORLD.Get_rank()} finished generation", flush=True)
     
@@ -69,7 +72,7 @@ def setup_generation(config):
     return model, halocat
 
 def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, save_every=5, 
-                           output_dir="checkpoints", suffix="", max_attempts=5):
+                           output_dir="checkpoints", suffix="", max_attempts=5, processes=3):
 
     # Create an empty input list and output array
     # The shape of the output array is (number of inputs, number of inner runs, 3, number of rbin_centers)
@@ -101,7 +104,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
         # and it even uses multprocessing to speed things up
         try:
             result = calculate_all_iterations(model, rbins, halocat, runs=runs, input_dict=input_dict,
-                                       max_attempts=max_attempts)
+                                       max_attempts=max_attempts, processes=3)
             outputs[i] = result
             inputs.append(all_inputs[i])
         except Exception as e:
@@ -261,6 +264,9 @@ def nonroot(comm):
     return 0
 
 def main(param_loc):
+    # Spawn for safe multiprocessing on each rank
+    mp.set_start_method("spawn", force=True)
+
     # Get our MPI communicator, our rank, and the world size.
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
