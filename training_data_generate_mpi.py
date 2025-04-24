@@ -162,6 +162,7 @@ def nonroot(comm):
 
     # Receive the keys from root
     keys = receive_keys(comm)
+    print(f"Rank {rank} received keys: {keys}", flush=True)
     
     # Receive shape of inputs from root
     input_shape = np.empty(2, dtype=int)
@@ -170,12 +171,14 @@ def nonroot(comm):
     # Get the size to allocate a buffer for the relevant inputs
     start_ind, end_ind, cols = determine_size(input_shape, rank, lowest_rank=0, highest_rank=comm.Get_size()-1)
     rows = end_ind - start_ind
+    print(f"Rank {rank} will receive inputs from {start_ind} to {end_ind}", flush=True)
 
     # Create a buffer to hold the inputs
     inputs = np.empty((rows, cols), dtype=float)
     # Receive the inputs from root
     req = comm.IRecv(inputs, source=0, tag=0)
     req.Wait()
+    print(f"Rank {rank} received inputs: {inputs}", flush=True)
 
     # Now we have the inputs, we can do whatever we want with them
     # TODO: Enter calculation loop. Root will also do this
