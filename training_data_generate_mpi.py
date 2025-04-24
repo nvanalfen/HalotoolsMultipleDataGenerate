@@ -96,7 +96,7 @@ def receive_keys(comm):
     comm.Bcast(shape, root=0)
 
     # Create an empty array to hold the keys
-    arr = np.chararray(shape, itemsize=1)
+    arr = np.empty(shape, dtype="S1")
     comm.Bcast(arr, root=0)
 
     # decode byte array into keys
