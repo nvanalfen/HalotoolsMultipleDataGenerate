@@ -119,7 +119,7 @@ def root(comm, param_loc):
     requests = []                       # List of requests for non-blocking sends
     for i in range(1, comm.Get_size()):
         # Set lowest rank to 0 as root rank will be involved as well
-        start_ind, end_ind, cols = determine_size(input_shape, i, 0, comm.Get_size()-1)
+        start_ind, end_ind, cols = determine_size(input_shape, i, min_rank=0, max_rank=comm.Get_size()-1)
         rank_ownership[i] = (start_ind, end_ind)
 
         # Send the inputs to the rank
@@ -169,7 +169,7 @@ def nonroot(comm):
     comm.Bcast(input_shape, root=0)
 
     # Get the size to allocate a buffer for the relevant inputs
-    start_ind, end_ind, cols = determine_size(input_shape, rank, lowest_rank=0, highest_rank=comm.Get_size()-1)
+    start_ind, end_ind, cols = determine_size(input_shape, rank, min_rank=0, max_rank=comm.Get_size()-1)
     rows = end_ind - start_ind
     print(f"Rank {rank} will receive inputs from {start_ind} to {end_ind}", flush=True)
 
