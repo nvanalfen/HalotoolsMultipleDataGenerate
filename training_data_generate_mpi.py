@@ -277,8 +277,6 @@ def main(param_loc):
         return nonroot(comm)
     
 if __name__ == "__main__":
-    # Force multiprocessing to use spawn for safety
-    mp.set_start_method("spawn", force=True)
 
     # Get the parameter location from the command line
     import sys
