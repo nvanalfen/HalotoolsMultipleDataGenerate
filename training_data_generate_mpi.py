@@ -104,7 +104,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
         # and it even uses multprocessing to speed things up
         try:
             result = calculate_all_iterations(model, rbins, halocat, runs=runs, input_dict=input_dict,
-                                       max_attempts=max_attempts, processes=3)
+                                       max_attempts=max_attempts, processes=processes)
             outputs[i] = result
             inputs.append(all_inputs[i])
         except Exception as e:
@@ -277,6 +277,9 @@ def main(param_loc):
         return nonroot(comm)
     
 if __name__ == "__main__":
+    # Force multiprocessing to use spawn for safety
+    mp.set_start_method("spawn", force=True)
+
     # Get the parameter location from the command line
     import sys
     config_loc = sys.argv[1]
