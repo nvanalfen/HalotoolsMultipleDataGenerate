@@ -34,7 +34,7 @@ def run_generation(config, keys, inputs):
     output = config['output']
 
     _, _, outputs = generate_training_data(model, rbins, halocat, keys, inputs,
-                                                   inner_runs=runs, save_every=save_every,
+                                                   runs=runs, save_every=save_every,
                                                    output_dir=output, suffix="",
                                                    max_attempts=max_attempts)
     
@@ -66,14 +66,14 @@ def setup_generation(config):
 
     return model, halocat
 
-def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=10, save_every=5, 
+def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, save_every=5, 
                            output_dir="checkpoints", suffix="", max_attempts=5):
 
     # Create an empty input list and output array
     # The shape of the output array is (number of inputs, number of inner runs, 3, number of rbins)
     # The 3 corresponds to the three different correlation functions
     inputs = []
-    outputs = np.zeros((len(all_inputs), inner_runs, 3, len(rbins)))
+    outputs = np.zeros((len(all_inputs), runs, 3, len(rbins)))
     start_index = 0
 
     # check if a checkpoint file exists for this rank (i.e. if this is picking up from a previous run)
@@ -97,7 +97,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, inner_runs=1
         # Fortunately, the hard work is already taken care of in the imported function
         # and it even uses multprocessing to speed things up
         try:
-            result = calculate_all_iterations(model, rbins, halocat, input_dict, inner_runs=inner_runs, 
+            result = calculate_all_iterations(model, rbins, halocat, runs=runs, input_dict=input_dict,
                                        max_attempts=max_attempts)
             outputs[i] = result
             inputs.append(all_inputs[i])
