@@ -1,4 +1,3 @@
-from mpi4py import MPI
 import multiprocessing as mp
 import numpy as np
 import os
@@ -144,10 +143,7 @@ def nonroot(comm):
 
     return 0
 
-def main(spawn):
-    if spawn:
-        mp.set_start_method("spawn", force=True)
-
+def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
@@ -159,9 +155,15 @@ def main(spawn):
 if __name__ == "__main__":
     import sys
 
+
     spawn = False
     if len(sys.argv) > 1:
         spawn = bool(int(sys.argv[1]))
 
-    main(spawn)
+    if spawn:
+        mp.set_start_method("spawn", force=True)
+
+    from mpi4py import MPI
+
+    main()
     
