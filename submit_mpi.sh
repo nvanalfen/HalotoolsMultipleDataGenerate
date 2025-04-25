@@ -13,4 +13,9 @@ module load openmpi/4.1.5-gcc11.1
 source /work/blazek_group_storage/miniconda3/bin/activate
 conda activate halotools
 
-mpirun --mca btl vader,self -n 4 python3 training_data_generate_mpi.py config.yaml 1
+# the 0 argument indicates use fork multiprocess start method
+# the 1 argument indicates use spawn multiprocess start method
+# while spawn is "safer", it is slow and since I am only using multiptrocess for
+# simply getting correlations with no need to access information beyond the function
+# I should be safe
+mpirun --mca btl vader,self -n 4 python3 training_data_generate_mpi.py config.yaml 0
