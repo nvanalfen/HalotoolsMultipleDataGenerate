@@ -1,3 +1,5 @@
 __pycache__/
 checkpoints/
 results/
+output_logs/
+error_logs/
