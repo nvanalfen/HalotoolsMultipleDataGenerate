@@ -1,5 +1,5 @@
 # File parameters
-param_loc: fast_params.npz
+param_loc: test_params.npz
 output: results/results.npz
 checkpoint_dir: results/checkpoints/
 
