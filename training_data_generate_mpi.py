@@ -85,7 +85,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
     checkpoint_file = os.path.join(output_dir, f"checkpoint_{suffix}_{rank}")
     extension = ".npz"
     if os.path.exists(checkpoint_file+extension):
-        print(f"Rank {rank} found checkpoint file. Loading...")
+        print(f"Rank {rank} found checkpoint file. Loading...", flush=True)
         checkpoint = np.load(checkpoint_file+extension)
         inputs = checkpoint['inputs'].tolist()
         outputs = checkpoint['outputs']
@@ -220,7 +220,6 @@ def root(comm, param_loc):
     # Save the outputs to a file
     output_f_name = config["output"]
     np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs)
-    print(f"Rank {comm.Get_rank()} saved outputs to {output_f_name}", flush=True)
 
     # TODO: Clean up checkpoint files
 
@@ -234,7 +233,6 @@ def nonroot(comm):
 
     # Receive the keys from root
     keys = receive_keys(comm)
-    print(f"Rank {rank} received keys: {keys}", flush=True)
     
     # Receive shape of inputs from root
     input_shape = np.empty(2, dtype=int)
@@ -243,14 +241,12 @@ def nonroot(comm):
     # Get the size to allocate a buffer for the relevant inputs
     start_ind, end_ind, cols = determine_size(input_shape, rank, min_rank=0, max_rank=comm.Get_size()-1)
     rows = end_ind - start_ind
-    print(f"Rank {rank} will receive inputs from {start_ind} to {end_ind}", flush=True)
 
     # Create a buffer to hold the inputs
     inputs = np.empty((rows, cols), dtype=float)
     # Receive the inputs from root
     req = comm.Irecv(inputs, source=0, tag=0)
     req.Wait()
-    print(f"Rank {rank} received inputs: {inputs}", flush=True)
 
     # Now we have the inputs, we can do whatever we want with them
     # TODO: Enter calculation loop. Root will also do this

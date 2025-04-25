@@ -4,4 +4,4 @@
 # the arguments passed to the script are:
 # 1. config.yaml: The configuration file for the training data generation script.
 # 2. 1: This tells the process to set the multiprocess start mode to spawn instead of fork. Safer
-mpirun --mca btl vader,self -n 5 python3 training_data_generate.py config.yaml 1
+mpirun --mca btl vader,self -n 4 python3 training_data_generate_mpi.py config.yaml 1

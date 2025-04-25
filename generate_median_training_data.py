@@ -271,7 +271,7 @@ def main(job, max_jobs):
     ############################################################################################################################
     # MODEL PARAMETERS #########################################################################################################
     ############################################################################################################################
-    inner_runs = 2
+    inner_runs = 10
     constant = True
     catalog = "bolplanck"
     #catalog = "multidark"
@@ -280,7 +280,7 @@ def main(job, max_jobs):
     #rbins = np.logspace(-1,1.8,29)
     rbin_centers = (rbins[:-1]+rbins[1:])/2.0
 
-    param_f_name = "test_params.npz"                # Location of the input parameter file
+    param_f_name = "fast_params.npz"                # Location of the input parameter file
     output_dir = "results"                     # Location to save the output data
 
     ############################################################################################################################
