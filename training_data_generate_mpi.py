@@ -33,12 +33,14 @@ def run_generation(config, keys, inputs):
     save_every = config['save_every']
     checkpoint_dir = config['checkpoint_dir']
     processes = config['processes']
+    parallel_method = config["parallelization"]
 
     _, _, outputs = generate_training_data(model, rbins, halocat, keys, inputs,
                                                    runs=runs, save_every=save_every,
                                                    output_dir=checkpoint_dir, suffix="",
                                                    max_attempts=max_attempts,
-                                                   processes=processes)
+                                                   processes=processes,
+                                                   parallel_method=parallel_method)
     
     print(f"Rank {MPI.COMM_WORLD.Get_rank()} finished generation", flush=True)
     
@@ -71,7 +73,8 @@ def setup_generation(config):
     return model, halocat
 
 def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, save_every=5, 
-                           output_dir="checkpoints", suffix="", max_attempts=5, processes=3):
+                           output_dir="checkpoints", suffix="", max_attempts=5, processes=3,
+                           parallel_method="correlation"):
 
     # Create an empty input list and output array
     # The shape of the output array is (number of inputs, number of inner runs, 3, number of rbin_centers)
@@ -101,7 +104,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
         # and it even uses multprocessing to speed things up
         try:
             result = calculate_all_iterations(model, rbins, halocat, runs=runs, input_dict=input_dict,
-                                       max_attempts=max_attempts, processes=processes)
+                                       max_attempts=max_attempts, processes=processes, parallel_method=parallel_method)
             outputs[i] = result
             inputs.append(all_inputs[i])
         except Exception as e:

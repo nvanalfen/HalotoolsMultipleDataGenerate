@@ -40,3 +40,8 @@ save_every: 5                           # Save every set of n inputs (all or non
 
 # Other parameters
 processes: 3                            # Number of processes to use for multiprocessing
+parallelization: "iteration"            # Parallelization method: correlation or iteration
+# correlation - Do each iteration in series, but parallelize the correlations inside each iteration
+# iteration - Do each iteration in parallel, but do serialize correlations inside each iteration
+# iteration scales much better with cores available, and is even at least as fast with the same number of cores,
+# but both optionas are available
