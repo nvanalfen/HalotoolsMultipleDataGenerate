@@ -91,6 +91,14 @@ def build_model_instance(cen_strength, sat_params, sat_bins, halocat, constant=T
     
     return model_instance
 
+def make_data_row(model, rbins, halocat):
+    gal_table = model.mock.galaxy_table
+
+    coords = np.array( [ gal_table["x"], gal_table["y"], gal_table["z"] ] ).T
+    orientations = np.array( [ gal_table["galaxy_axisA_x"], gal_table["galaxy_axisA_y"], gal_table["galaxy_axisA_z"] ] ).T
+    
+    return (coords, orientations, rbins, halocat.Lbox)
+
 def correlate(row):
     func, args, kwargs = row
     return func(*args, **kwargs)
@@ -150,43 +158,119 @@ def generate_correlations_parallel(model, rbins, halocat, processes=3):
     
     return results
 
-def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attempts, processes=3):
+def iterate_wrapper(coords, orientations, rbins, Lbox):
+    func_params = [
+            ( tpcf, (coords, rbins, coords), {"period":Lbox} ),
+            ( ed_3d, (coords, orientations, coords, rbins), {"period":Lbox} ),
+            ( ee_3d, (coords, orientations, coords, orientations, rbins), {"period":Lbox} ),
+    ]
+
+    results = []
+    for func, args, kwargs in func_params:
+        results.append(func(*args, **kwargs))
+    
+    return np.array(results)
+
+def generate_correlations_parallel_loop_series(model, rbins, halocat, runs, max_attempts, processes=3):
+    """
+    This function will do each loop in series, running all correlations in parallel each loop
+    """
+    # Build empty array to hold the results
+    # Full array is Nxmxcxb
+    # N = number of different inputs
+    # m = number of different runs
+    # c = number of different correlation functions (3)
+    # b = number of different bins
+    # In this function, we're only working with a single set of inputs, so we need mxcxb
+    outputs = np.zeros( (runs, 3, len(rbins)-1) )
+
+    # Repopulate and sample
+    for i in range(runs):
+        repeat = True
+        attempt = 0
+
+        while repeat and attempt < max_attempts:
+            model.mock.populate()
+
+            # Calculate correlations
+            results = generate_correlations_parallel(model, rbins, halocat, processes=processes)
+            attempt += 1
+
+            # Check for nans
+            repeat = ( any( np.isnan(results[0]) ) or any( np.isnan(results[1]) ) or any( np.isnan(results[2]) ) )
+
+        outputs[i] = results
+
+    return outputs
+
+def generate_correlations_series_loop_parallel(model, rbins, halocat, runs, max_attempts, processes=None):
+    """
+    This function runs each loop in parallel with one another, doing the correlations serially inside each loop.
+    Because the model instance of HODModelFactory is not pickleable, we need to iterate and populate to build a list of inputs for the pool.
+    """
+    if processes is None:
+        processes = min(mp.cpu_count(), runs)           # Use all available cores, but not more than the number of runs
+
+    # Build empty array to hold the results
+    # Full array is mxcxb
+    # m = number of different runs
+    # c = number of different correlation functions (3)
+    # b = number of different bins (rbins-1)
+    results = np.zeros( (runs, 3, len(rbins)-1) )
+    repeat = np.ones(runs, dtype=bool)                # Array to keep track of which runs need to be repeated
+    attempt = 0
+
+    # Here is the parallelized loop
+    # Perform this up to max_Attempts times
+    # Replacing the results array with the new results where repeat is true
+    while any(repeat) and attempt < max_attempts:
+        # Build list of positions and orientations to pass in.
+        # Because model is NOT pickleable, we need to iterate and populate to build a list of inputs for the pool
+        rows = []
+        for i in range( sum(repeat) ):
+            # Equal to number of run on first attempt
+            # Any subsequent runs only need to create as many data rows as there are repeat==true indices
+            model.mock.populate()
+            rows.append(make_data_row(model, rbins, halocat))
+
+        with mp.Pool(processes=processes) as pool:
+            temp_results = pool.starmap(iterate_wrapper, rows)
+
+        results[repeat] = np.array(temp_results)
+
+        # Check for nans
+        # If any of the results are nan, set repeat to true for that index
+        repeat = np.isnan(results).any(axis=(1,2))        # Check for nans in the results array
+
+        # Update attempt counter
+        attempt += 1
+        
+    return results
+
+def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attempts, processes=3, parallel_method="correlation"):
+    
+    assert parallel_method in ["correlation", "iteration"], "parallel_method must be either 'correlation' or 'iteration'"
+
     # Adjust model params
-        for key in input_dict.keys():
-            model.param_dict[key] = input_dict[key]
+    for key in input_dict.keys():
+        model.param_dict[key] = input_dict[key]
 
-        # Build empty array to hold the results
-        # Full array is Nxmxcxb
-        # N = number of different inputs
-        # m = number of different runs
-        # c = number of different correlation functions (3)
-        # b = number of different bins
-        # In this function, we're only working with a single set of inputs, so we need mxcxb
-        outputs = np.zeros( (runs, 3, len(rbins)-1) )
+    # Full array is Nxmxcxb
+    # N = number of different inputs
+    # m = number of different runs
+    # c = number of different correlation functions (3)
+    # b = number of different bins
+    # In this function, we're only working with a single set of inputs, so we need mxcxb
+    output_shape = (runs, 3, len(rbins)-1)
 
-        # Repopulate and sample
-        for i in range(runs):
-            try:
-                repeat = True
-                attempt = 0
-
-                while repeat and attempt < max_attempts:
-                    model.mock.populate()
-
-                    # Calculate correlations
-                    results = generate_correlations_parallel(model, rbins, halocat)
-                    attempt += 1
-
-                    # Check for nans
-                    repeat = ( any( np.isnan(results[0]) ) or any( np.isnan(results[1]) ) or any( np.isnan(results[2]) ) )
-
-                outputs[i] = results
-
-            except:
-                print(f"Failed on {input_dict}", flush=True)
-                return np.zeros(outputs.shape)              # Return all zeros in the case of a catastophic failure
-
-        return outputs
+    try:
+        if parallel_method == "correlation":
+            return generate_correlations_parallel_loop_series(model, rbins, halocat, runs, max_attempts, processes=processes)
+        elif parallel_method == "iteration":
+            return generate_correlations_series_loop_parallel(model, rbins, halocat, runs, max_attempts, processes=processes)
+    except:
+        print(f"Failed on {input_dict}", flush=True)
+        return np.zeros(output_shape)              # Return all zeros in the case of a catastophic failure
 
 def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, save_every=5, 
                            param_loc="params.npz", output_dir="data", suffix="", max_attempts=5):
