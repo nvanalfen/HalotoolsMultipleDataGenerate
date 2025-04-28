@@ -1,7 +1,7 @@
 # File parameters
 param_loc: test_params.npz
 output: results/results.npz
-checkpoint_dir: results/checkpoints/
+checkpoint_dir: checkpoints/
 
 # Array parameters
 # method: logspace, file, list
