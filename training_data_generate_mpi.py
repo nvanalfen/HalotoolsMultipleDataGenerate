@@ -117,22 +117,18 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
 def determine_size(shape, rank, min_rank, max_rank):
     """
     Determine the size of the array to be sent to each rank.
-    This function is used to determine the start and end indices for each rank.
-    these indices will determine buffer size.
+    This function is used to determine the range to split data on.
+    To avoid loading all small values to one rank or all large values to another,
+    start at the index matching the rank (accounting for if rank 0 is involved)
+    and use step sizes equal to the maximum number of ranks involved.
     """
     rows, cols = shape
-    # split up the indices by which rank will be in charge
-    chunk_size = int(rows // (max_rank - min_rank + 1))
+    
+    start = rank - min_rank                     # Start at the index matching the rank (one lower if rank 0 isn't helping)
+    stop = rows                                 # End at the end of the array
+    step = max_rank - min_rank + 1              # Step size equal to the maximum number of ranks involved
 
-    assert rank >= min_rank, "Rank must be greater than lowest rank"
-
-    start = (rank - min_rank) * chunk_size
-    end = min(start + chunk_size, rows)
-
-    # If this is the last rank, it will take care of the rest of the rows
-    if rank == max_rank:
-        end = rows
-    return start, end, cols
+    return range(start, stop, step)
 
 def broadcast_keys(comm, keys):
     # Encode into byte array
@@ -181,11 +177,11 @@ def root(comm, param_loc):
     requests = []                       # List of requests for non-blocking sends
     for i in range(1, comm.Get_size()):
         # Set lowest rank to 0 as root rank will be involved as well
-        start_ind, end_ind, cols = determine_size(input_shape, i, min_rank=0, max_rank=comm.Get_size()-1)
-        rank_ownership[i] = (start_ind, end_ind)
+        span = determine_size(input_shape, i, min_rank=0, max_rank=comm.Get_size()-1)
+        rank_ownership[i] = span
 
         # Send the inputs to the rank
-        sendbuf = inputs[start_ind:end_ind]
+        sendbuf = inputs[span]
         req = comm.Isend(sendbuf, dest=i, tag=0)
         requests.append(req)
 
@@ -193,22 +189,22 @@ def root(comm, param_loc):
     MPI.Request.Waitall(requests)
 
     # Now that the relevant inputs have been sent off to other ranks, gather our own to be done by root
-    start_ind, end_ind, cols = determine_size(input_shape, 0, 0, comm.Get_size()-1)
-    root_inputs = inputs[start_ind:end_ind]
+    span = determine_size(input_shape, 0, 0, comm.Get_size()-1)
+    root_inputs = inputs[span]
 
     # Allocate the full output array
     # Shape of Nxmx3xlen(rbins)-1
     outputs = np.zeros((input_shape[0], config['runs'], 3, len(config['rbins'])-1), dtype=float)
 
     # TODO: Enter calculation loop. Non-root ranks will also do this
-    outputs[start_ind:end_ind] = run_generation(config, keys, root_inputs)
+    outputs[span] = run_generation(config, keys, root_inputs)
 
     # TODO: use Irecv to receive the results from non-root ranks
     requests = []
     for i in range(1, comm.Get_size()):
-        start_ind, end_ind = rank_ownership[i]
+        span = rank_ownership[i]
         # Receive the inputs from the rank
-        buffer = outputs[start_ind:end_ind]
+        buffer = outputs[span]
         req = comm.Irecv(buffer, source=i, tag=0)
         requests.append(req)
 
@@ -235,10 +231,11 @@ def nonroot(comm):
     # Receive shape of inputs from root
     input_shape = np.empty(2, dtype=int)
     comm.Bcast(input_shape, root=0)
+    _, cols = input_shape
 
     # Get the size to allocate a buffer for the relevant inputs
-    start_ind, end_ind, cols = determine_size(input_shape, rank, min_rank=0, max_rank=comm.Get_size()-1)
-    rows = end_ind - start_ind
+    span = determine_size(input_shape, rank, min_rank=0, max_rank=comm.Get_size()-1)
+    rows = len(span)
 
     # Create a buffer to hold the inputs
     inputs = np.empty((rows, cols), dtype=float)
