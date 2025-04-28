@@ -183,7 +183,7 @@ def calculate_all_iterations(model, rbins, halocat, runs, input_dict, max_attemp
                 outputs[i] = results
 
             except:
-                print(f"Failed on {input_dict}")
+                print(f"Failed on {input_dict}", flush=True)
                 return np.zeros(outputs.shape)              # Return all zeros in the case of a catastophic failure
 
         return outputs
@@ -249,13 +249,13 @@ def generate_training_data(model, rbins, job, max_jobs, halocat, inner_runs=10, 
         inputs = data["inputs"].tolist()
         outputs = data["outputs"]
         start_point = len(inputs)
-        print("Loaded existing data")
+        print("Loaded existing data", flush=True)
 
     keys = np.array(['central_alignment_strength', 'satellite_alignment_strength',
                         'logMmin', 'sigma_logM', 'logM0', 'logM1', 'alpha'])
 
     for i in range(len(usable_inputs))[start_point:]:
-        print(f"Starting {i}")
+        print(f"Starting {i}", flush=True)
 
         input_dict = {keys[j]: usable_inputs[i][j] for j in range(len(keys))}
         results = calculate_all_iterations(model, rbins, halocat, inner_runs, input_dict, max_attempts)
@@ -316,7 +316,7 @@ def main(job, max_jobs):
     # Save data, making sure to account for this script being run on multiple jobs
     np.savez( os.path.join( output_dir, f"full_run_{suffix}.npz" ), keys=keys, inputs=inputs, outputs=outputs )
 
-    print("Time: ", time.time()-start,"\n")
+    print("Time: ", time.time()-start,"\n", flush=True)
 
 if __name__ == "__main__":
     ############################################################################################################################
