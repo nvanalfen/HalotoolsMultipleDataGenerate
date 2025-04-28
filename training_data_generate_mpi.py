@@ -6,14 +6,14 @@ from generate_median_training_data import build_model_instance
 from generate_median_training_data import calculate_all_iterations
 from data_utils import load_yaml_config
 
-def atomic_save(filename, data_dict):
+def atomic_save(dirname, filename, data_dict):
     """
     Save data to a file using an atomic pattern.
     This prevents issues if there is a failure during file save
     """
-    temp_filename = filename + ".tmp"
-    np.savez(temp_filename, **data_dict)
-    os.rename(temp_filename+".npz", filename+".npz")
+    temp_filename = "tmp_" + filename
+    np.savez( os.path.join(dirname, temp_filename), **data_dict)
+    os.rename(os.path.join(dirname, temp_filename), os.path.join(dirname, filename))
 
 def clear_checkpoints(config):
     # TODO: Delete all checkpoint files
@@ -31,12 +31,12 @@ def run_generation(config, keys, inputs):
     runs = config['runs']
     max_attempts = config['max_attempts']
     save_every = config['save_every']
-    output = config['output']
+    checkpoint_dir = config['checkpoint_dir']
     processes = config['processes']
 
     _, _, outputs = generate_training_data(model, rbins, halocat, keys, inputs,
                                                    runs=runs, save_every=save_every,
-                                                   output_dir=output, suffix="",
+                                                   output_dir=checkpoint_dir, suffix="",
                                                    max_attempts=max_attempts,
                                                    processes=processes)
     
@@ -82,11 +82,10 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
 
     # check if a checkpoint file exists for this rank (i.e. if this is picking up from a previous run)
     rank = MPI.COMM_WORLD.Get_rank()
-    checkpoint_file = os.path.join(output_dir, f"checkpoint_{suffix}_{rank}")
-    extension = ".npz"
-    if os.path.exists(checkpoint_file+extension):
+    checkpoint_file = f"checkpoint_{rank}.npz"
+    if os.path.exists( os.path.join(output_dir, checkpoint_file) ):
         print(f"Rank {rank} found checkpoint file. Loading...", flush=True)
-        checkpoint = np.load(checkpoint_file+extension)
+        checkpoint = np.load( os.path.join(output_dir, checkpoint_file), allow_pickle=True)
         inputs = checkpoint['inputs'].tolist()
         outputs = checkpoint['outputs']
         start_index = len(inputs)
@@ -96,7 +95,6 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
         print(f"Rank {rank} processing input {i+1}/{len(all_inputs)}", flush=True)
         # Get the input for this iteration
         input_dict = {keys[j]: all_inputs[i][j] for j in range(len(keys))}
-        inputs.append(input_dict)
 
         # Calculate the outputs for this input
         # Fortunately, the hard work is already taken care of in the imported function
@@ -112,7 +110,7 @@ def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, sav
         # Save the outputs every save_every iterations
         # Only save after full chunks of inputs. All or nothing on the iterations within an input
         if (i + 1) % save_every == 0:
-            atomic_save(checkpoint_file, {'keys':keys, 'inputs': inputs, 'outputs': outputs})
+            atomic_save(output_dir, checkpoint_file, {'keys':keys, 'inputs':inputs, 'outputs':outputs})
 
     return keys, inputs, outputs
 
