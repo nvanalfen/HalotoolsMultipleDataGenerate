@@ -9,6 +9,7 @@
       or the runs (10 or however many cores).
     - This seems very possible. Instead of having a submit.sh file, have a python file read the yaml and submit the batch job
 - Add yaml arguments for which populations we want to correlate and which correlations we want
+- Save copy of config with results (just shove the dict in the npz file). This will ensure we could exactly recreate the run
 
 Completed but needs testing:
 + Alternate parallelization methods
