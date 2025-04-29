@@ -1,6 +1,7 @@
 import subprocess
 import os
 import sys
+import tempfile
 from data_utils import load_yaml_config
 
 def build_slurm_job(config):
@@ -72,13 +73,27 @@ def submit_slurm_job(config, use_temp_file=True, persistent_f_name=None):
 
     # Write the script to a temporary file
     if use_temp_file:
-        temp_file = "slurm_job.sh"
-        with open(temp_file, "w") as f:
-            f.write(slurm_script)
-        # Submit the job
-        subprocess.run(["sbatch", temp_file])
-        # Remove the temporary file
-        os.remove(temp_file)
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".sh") as temp_script:
+            temp_script.write(slurm_script)
+            temp_script_path = temp_script.name
+
+        try:
+            print("Submitting SLURM job...")
+            result = subprocess.run(["sbatch", temp_script_path], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("SLURM job submitted successfully.")
+                print(result.stdout)
+            else:
+                print("Error submitting SLURM job:")
+                print(result.stderr)
+        except subprocess.CalledProcessError as e:
+            print("Error submitting SLURM job:")
+            print(e.stderr)
+        except Exception as e:
+            print("An unexpected error occurred while submitting the SLURM job.")
+            print(e)
+        finally:
+            os.remove(temp_script_path)  # Clean up the temporary file
     else:
         f_name = persistent_f_name
         with open(f_name, "w") as f:
@@ -91,4 +106,4 @@ if __name__ == "__main__":
     config = load_yaml_config(config_file)
 
     # Submit the job
-    submit_slurm_job(config, use_temp_file=False, persistent_f_name="test_submit.sh")
+    submit_slurm_job(config, use_temp_file=True)
