@@ -39,9 +39,38 @@ max_attempts: 5                         # Number of attempts for each run to try
 save_every: 5                           # Save every set of n inputs (all or none on the iterations)
 
 # Other parameters
-processes: 3                            # Number of processes to use for multiprocessing
+# If processes is null, it will be replaced with the value of runs (if iteration parallelication is chosen),
+# or 3 (if correlation parallelization is chosen).
+processes: null                         # Number of processes to use for multiprocessing
+cap_processes: True                     # If true, will cap the number of processes to --cpus-per-task in the slurm section (if --cpus-per-task is not null)
 parallelization: "iteration"            # Parallelization method: correlation or iteration
 # correlation - Do each iteration in series, but parallelize the correlations inside each iteration
 # iteration - Do each iteration in parallel, but do serialize correlations inside each iteration
 # iteration scales much better with cores available, and is even at least as fast with the same number of cores,
 # but both optionas are available
+
+# This slurm section will replace the typical submit.sh file letting you run the code with sbatch
+# without needing to update the submit.sh file each time
+# This section is only used by the submit_slurm.py file
+slurm:
+  # Slurm parameters
+  --job-name: "mpi_generate"                                      # Job name
+  --partition: "short"                                            # Partition
+  --time: "5:00:00"                                               # Time limit (hh:mm:ss)
+  --mem-per-cpu: "8GB"                                            # Memory per CPU
+  --nodes: 1                                                      # Number of nodes
+  --ntasks: 5                                                     # Number of tasks (processes)
+  --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
+  --output: "output_logs/mpi_example.out"                         # Output file
+  --error: "error_logs/mpi_example.err"                           # Error file
+#  --mail_type: "ALL"                                              # Mail type (NONE, BEGIN, END, FAIL, ALL)
+#  --mail_user: ""                                                 # Email address for notifications
+
+  modules: ["openmpi/4.1.5-gcc11.1"]                              # Modules to load (optional)
+  source: "/work/blazek_group_storage/miniconda3/bin/activate"    # Path to conda activate environment (optional)
+  conda_env: "halotools"                                          # Name of conda environment to activate (optional)
+  cli_command: "mpirun"                                           # Command to run the script
+  cli_args: ["--mca", "btl", "vader,self"]                        # Arguments for the command
+  python_command: "python3"                                       # Python command to run the script
+  script: "training_data_generate_mpi.py"                         # Script to run
+  script_args: ["config.yaml", 0 ]                                # Arguments for the script
