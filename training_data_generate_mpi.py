@@ -18,7 +18,13 @@ def atomic_save(dirname, filename, data_dict):
 def clear_checkpoints(config):
     # TODO: Delete all checkpoint files
     # Only call this after the output file has been saved
-    pass
+    checkpoint_dir = config['checkpoint_dir']
+    if not os.path.exists(checkpoint_dir):
+        print(f"Checkpoint directory {checkpoint_dir} does not exist. Skipping cleanup.", flush=True)
+        return
+    for filename in os.listdir(checkpoint_dir):
+        if filename.startswith("checkpoint_"):
+            os.remove(os.path.join(checkpoint_dir, filename))
 
 def run_generation(config, keys, inputs):
     """
@@ -204,21 +210,33 @@ def root(comm, param_loc):
 
     # TODO: use Irecv to receive the results from non-root ranks
     requests = []
+
+    # MPI needs contiguous buffers, so we need to create a temporary buffer for each rank
+    temp_buffers = []
     for i in range(1, comm.Get_size()):
-        span = rank_ownership[i]
+        temp = np.zeros((len(rank_ownership[i]), config['runs'], 3, len(config['rbins'])-1), dtype=float)
+        temp_buffers.append(temp)
+
+    for i in range(1, comm.Get_size()):
         # Receive the inputs from the rank
-        buffer = outputs[span]
+        buffer = temp_buffers[i-1]
         req = comm.Irecv(buffer, source=i, tag=0)
         requests.append(req)
 
     # Wait for all receives to complete
     MPI.Request.Waitall(requests)
 
+    # Populate the outputs array with the results in buffers
+    for i in range(1, comm.Get_size()):
+        span = rank_ownership[i]
+        outputs[span] = temp_buffers[i-1]
+
     # Save the outputs to a file
     output_f_name = config["output"]
     np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs)
 
     # TODO: Clean up checkpoint files
+    clear_checkpoints(config)
 
     return 0
 
@@ -247,9 +265,7 @@ def nonroot(comm):
     req.Wait()
 
     # Now we have the inputs, we can do whatever we want with them
-    # TODO: Enter calculation loop. Root will also do this
     outputs = run_generation(config, keys, inputs)
-    # TODO: use Isend to return the results to root
     req = comm.Isend(outputs, dest=0, tag=0)
     req.Wait()
 

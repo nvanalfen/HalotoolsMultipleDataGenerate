@@ -1,4 +1,4 @@
-- Have master rank remove checkpoint files once the master output has been written
++ Have master rank remove checkpoint files once the master output has been written
 - Clean up general script so it can read from yaml as well instead of requiring the hacky hard-coded variables
 + See if I can adapt multiprocessing to handle doing the 10 (or however many) averages in parallel 
   (with the three correlations in seris within each run) as opposed to the runs in series with the correlations in parallel within.
@@ -7,9 +7,11 @@
 - See if there's a way to dynamically submit batch jobs with number of cores defined in yaml
     - This would be very helpful in the case above where we can choose to parallelize the different correlations (3 cores),
       or the runs (10 or however many cores).
+    - This seems very possible. Instead of having a submit.sh file, have a python file read the yaml and submit the batch job
 - Add yaml arguments for which populations we want to correlate and which correlations we want
 
 Completed but needs testing:
-- Alternate parallelization methods
-    - correlation vs iteration. Works in small-scale, make sure implementation hasn't broken anything
-- Test correctness of correlations from multi-job method with MPI method. npz files are in globustransfer/results
++ Alternate parallelization methods
+    + correlation vs iteration. Works in small-scale, make sure implementation hasn't broken anything
+      + There was an issue with the non-contiguous buffers using the new slicing method, but it is fixed
++ Test correctness of correlations from multi-job method with MPI method. npz files are in globustransfer/results
