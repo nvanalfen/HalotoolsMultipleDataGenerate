@@ -233,9 +233,8 @@ def root(comm, param_loc):
 
     # Save the outputs to a file
     output_f_name = config["output"]
-    np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs)
+    np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs, config=config)
 
-    # TODO: Clean up checkpoint files
     clear_checkpoints(config)
 
     return 0

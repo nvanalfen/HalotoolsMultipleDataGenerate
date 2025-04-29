@@ -1,5 +1,5 @@
 # File parameters
-param_loc: test_params.npz
+param_loc: fast_params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
 
@@ -57,10 +57,10 @@ slurm:
   --job-name: "mpi_generate"                                      # Job name
   --partition: "short"                                            # Partition
   --time: "5:00:00"                                               # Time limit (hh:mm:ss)
-  --mem-per-cpu: "8GB"                                            # Memory per CPU
+  --mem-per-cpu: "1GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
   --ntasks: 5                                                     # Number of tasks (processes)
-  --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
+  --cpus-per-task: 3                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
   --output: "output_logs/mpi_example.out"                         # Output file
   --error: "error_logs/mpi_example.err"                           # Error file
 #  --mail_type: "ALL"                                              # Mail type (NONE, BEGIN, END, FAIL, ALL)
