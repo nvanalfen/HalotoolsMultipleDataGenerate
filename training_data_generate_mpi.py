@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import multiprocessing as mp
+import h5py
 from halotools.sim_manager import CachedHaloCatalog
 from generate_median_training_data import build_model_instance
 from generate_median_training_data import calculate_all_iterations
@@ -52,6 +53,19 @@ def run_generation(config, keys, inputs):
     
     return outputs
 
+def run_tables(config, keys, inputs):
+    """
+    Instead of running the generation and correlation data, simply repopulate and save some of the table columns produced by the model.
+    """
+    model, halocat = setup_generation(config)
+    runs = config['runs']
+    subset_dir = config['subset_dir']
+    runs = config['runs']
+    return_columns = config['return_columns']
+
+    generate_tables(model, halocat, keys, inputs, runs=runs,
+                    output_dir=subset_dir, return_columns=return_columns)
+
 def setup_generation(config):
     """
     Setup the generation of training data.
@@ -77,6 +91,87 @@ def setup_generation(config):
     model = build_model_instance(1.0, 1.0, sat_bins, halocat, constant=constant_alignment_strength, seed=seed)
 
     return model, halocat
+
+def generate_tables(model, halocat, keys, inputs, runs=10,
+                    output_dir="subsets", return_columns=None):
+    rank = MPI.COMM_WORLD.Get_rank()
+    num_ranks = MPI.COMM_WORLD.Get_size()
+    subset_file = f"subset_{rank}.h5"
+    start_index = 0
+    if os.path.exists( os.path.join(output_dir, subset_file) ):
+        with h5py.File(os.path.join(output_dir, subset_file), "r") as f:
+            group_names = [name for name in f if isinstance(f[name], h5py.Group)]
+            start_index = len(group_names)
+            print(f"Rank {rank} found subset file. Loading...", flush=True)
+    else:
+        print(f"Rank {rank} creating subset file...", flush=True)
+        with h5py.File(os.path.join(output_dir, subset_file), "w") as f:
+            if not return_columns or return_columns == "all" or len(return_columns) == 0:
+                # Use all the columns in the model
+                return_columns = np.array( [ col for col in model.mock.galaxy_table.columns ] )
+            f.attrs["columns"] = return_columns
+            f.attrs["simname"] = halocat.simname
+            f.attrs["redshift"] = halocat.redshift
+            f.attrs["halo_finder"] = halocat.halo_finder
+            f.attrs["version_name"] = halocat.version_name
+            f.attrs["particle_mass"] = halocat.particle_mass
+            keys_array = np.array(keys, dtype=h5py.string_dtype(encoding='utf-8'))
+            f.attrs["input_params"] = keys_array
+            f.attrs["description"] = "Columns stored from galaxy catalogs and halocat information and the parameters being adjusted."
+
+    # Loop through the inputs and create catalogs
+    for i in range(len(inputs))[start_index:]:
+        input_num = (i*num_ranks) + rank
+
+        # Adjust model params
+        input_row = inputs[i]
+        input_dict = {keys[j]: input_row[j] for j in range(len(keys))}
+        for key in input_dict.keys():
+            model.param_dict[key] = input_dict[key]
+
+        data_blocks = []
+        for j in range(runs):
+            # Generate the galaxy catalog
+            model.mock.populate()
+            # Get the data from the model
+            data = model.mock.galaxy_table[return_columns]
+            # Append to the list of data blocks
+            data_blocks.append(data)
+
+        # Append the data to a new group in the hdf5 file
+        with h5py.File(os.path.join(output_dir, subset_file), "a") as f:
+            group_name = f"input_{input_num}"
+            if group_name in f:
+                print(f"Rank {rank} found existing group {group_name}. Skipping...", flush=True)
+                continue
+            group = f.create_group(group_name)
+            group.attrs["params"] = input_row
+            for j, data in enumerate(data_blocks):
+                # Create a dataset for each run
+                dataset_name = f"iteration_{j}"
+                group.create_dataset(dataset_name, data=data, compression="gzip")
+
+def merge_hdf5_files(output_dir):
+    """
+    Merge all the hdf5 files in the output directory into a single file.
+    This is useful for cleaning up the output directory and making it easier to work with.
+    """
+    rank = MPI.COMM_WORLD.Get_rank()
+    num_ranks = MPI.COMM_WORLD.Get_size()
+    if rank == 0:
+        # Create a new hdf5 file to hold the merged data
+        with h5py.File(os.path.join(output_dir, "merged_data.h5"), "w") as f:
+            for i in range(num_ranks):
+                subset_file = f"subset_{i}.h5"
+                with h5py.File(os.path.join(output_dir, subset_file), "r") as g:
+                    # Copy all attrs fields
+                    for key in g.attrs.keys():
+                        f.attrs[key] = g.attrs[key]
+                    # Copy the groups from the subset file to the merged file
+                    for name in g:
+                        group = g[name]
+                        f.copy(group, name)
+        print(f"Rank {rank} merged hdf5 files into {os.path.join(output_dir, 'merged_data.h5')}", flush=True)
 
 def generate_training_data(model, rbins, halocat, keys, all_inputs, runs=10, save_every=5, 
                            output_dir="checkpoints", suffix="", max_attempts=5, processes=3,
@@ -171,6 +266,8 @@ def root(comm, param_loc):
     data = np.load(  config['param_loc'], allow_pickle=True)
     keys = data['keys']
     inputs = data['values']
+    return_product = config['return_product']
+    assert return_product in ["correlation", "columns"], f"Invalid return product {return_product}. Must be 'correlation' or 'columns'."
 
     # Broadcast config to all ranks
     comm.bcast(config, root=0)
@@ -201,41 +298,56 @@ def root(comm, param_loc):
     span = determine_size(input_shape, 0, 0, comm.Get_size()-1)
     root_inputs = inputs[span]
 
-    # Allocate the full output array
-    # Shape of Nxmx3xlen(rbins)-1
-    outputs = np.zeros((input_shape[0], config['runs'], 3, len(config['rbins'])-1), dtype=float)
+    # If we want correlations, enter the normal generation process
+    if return_product == "correlation":
+        # Allocate the full output array
+        # Shape of Nxmx3xlen(rbins)-1
+        outputs = np.zeros((input_shape[0], config['runs'], 3, len(config['rbins'])-1), dtype=float)
 
-    # TODO: Enter calculation loop. Non-root ranks will also do this
-    outputs[span] = run_generation(config, keys, root_inputs)
+        outputs[span] = run_generation(config, keys, root_inputs)
 
-    # TODO: use Irecv to receive the results from non-root ranks
-    requests = []
+        requests = []
 
-    # MPI needs contiguous buffers, so we need to create a temporary buffer for each rank
-    temp_buffers = []
-    for i in range(1, comm.Get_size()):
-        temp = np.zeros((len(rank_ownership[i]), config['runs'], 3, len(config['rbins'])-1), dtype=float)
-        temp_buffers.append(temp)
+        # MPI needs contiguous buffers, so we need to create a temporary buffer for each rank
+        temp_buffers = []
+        for i in range(1, comm.Get_size()):
+            temp = np.zeros((len(rank_ownership[i]), config['runs'], 3, len(config['rbins'])-1), dtype=float)
+            temp_buffers.append(temp)
 
-    for i in range(1, comm.Get_size()):
-        # Receive the inputs from the rank
-        buffer = temp_buffers[i-1]
-        req = comm.Irecv(buffer, source=i, tag=0)
-        requests.append(req)
+        for i in range(1, comm.Get_size()):
+            # Receive the inputs from the rank
+            buffer = temp_buffers[i-1]
+            req = comm.Irecv(buffer, source=i, tag=0)
+            requests.append(req)
 
-    # Wait for all receives to complete
-    MPI.Request.Waitall(requests)
+        # Wait for all receives to complete
+        MPI.Request.Waitall(requests)
 
-    # Populate the outputs array with the results in buffers
-    for i in range(1, comm.Get_size()):
-        span = rank_ownership[i]
-        outputs[span] = temp_buffers[i-1]
+        # Populate the outputs array with the results in buffers
+        for i in range(1, comm.Get_size()):
+            span = rank_ownership[i]
+            outputs[span] = temp_buffers[i-1]
 
-    # Save the outputs to a file
-    output_f_name = config["output"]
-    np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs, config=config)
+        # Save the outputs to a file
+        output_f_name = config["output"]
+        np.savez(output_f_name, keys=keys, inputs=inputs, outputs=outputs, config=config)
 
-    clear_checkpoints(config)
+        clear_checkpoints(config)
+    elif return_product == "columns":
+        # Generate the tables
+        run_tables(config, keys, root_inputs)
+
+        requests = []
+        # Get "results" from non-root (no actual returns, but will signal completion)
+        for i in range(1, comm.Get_size()):
+            dummy = np.empty(1, dtype='i')  # dummy buffer
+            req = comm.Irecv(dummy, source=i, tag=0)
+            requests.append(req)
+        # Wait for all receives to complete
+        MPI.Request.Waitall(requests)
+
+        # Merge files
+        merge_hdf5_files(config['subset_dir'])
 
     return 0
 
@@ -263,10 +375,20 @@ def nonroot(comm):
     req = comm.Irecv(inputs, source=0, tag=0)
     req.Wait()
 
-    # Now we have the inputs, we can do whatever we want with them
-    outputs = run_generation(config, keys, inputs)
-    req = comm.Isend(outputs, dest=0, tag=0)
-    req.Wait()
+    return_product = config['return_product']
+
+    if return_product == "correlation":
+        # Now we have the inputs, we can do whatever we want with them
+        outputs = run_generation(config, keys, inputs)
+        req = comm.Isend(outputs, dest=0, tag=0)
+        req.Wait()
+    elif return_product == "columns":
+        # Generate the tables
+        run_tables(config, keys, inputs)
+        # Send a dummy signal back to root to signal we are done
+        dummy = np.array(0, dtype='i')
+        req = comm.Isend(dummy, dest=0, tag=0)
+        req.Wait()
 
     # close and end
     return 0
