@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH -J mpi_test
 #SBATCH --partition=short
-#SBATCH --time=5:00:00
-#SBATCH --mem-per-cpu=8GB
-#SBATCH --nodes=1
-#SBATCH --ntasks=5
-#SBATCH --cpus-per-task=3
+#SBATCH --time=30:00:00
+#SBATCH --mem-per-cpu=1GB
+#SBATCH --nodes=2
+#SBATCH --ntasks=20
+#SBATCH --cpus-per-task=1
 #SBATCH --output=output_logs/mpi_example.out
 #SBATCH --error=error_logs/mpi_example.err
 
@@ -18,4 +18,4 @@ conda activate halotools
 # while spawn is "safer", it is slow and since I am only using multiptrocess for
 # simply getting correlations with no need to access information beyond the function
 # I should be safe
-mpirun --mca btl vader,self -n 5 python3 training_data_generate_mpi.py config.yaml 0
+mpirun --mca btl vader,self -n 20 python3 training_data_generate_mpi.py config.yaml 0

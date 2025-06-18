@@ -4,3 +4,4 @@ subsets/
 results/
 output_logs/
 error_logs/
+params.npz
