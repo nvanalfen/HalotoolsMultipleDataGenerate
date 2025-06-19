@@ -45,6 +45,8 @@ def generate(config, keys, inputs):
     num_ranks = MPI.COMM_WORLD.Get_size()
 
     model_dict, halocat = setup_generation(config)
+    job = config.get('job', 0)  # Get the job number if it exists, default to 0
+    num_jobs = config.get('num_jobs', 1)  # Get the number of jobs if it exists, default to 1
     rbins = config['rbins']
     runs = config['runs']
     max_attempts = config['max_attempts']
@@ -55,7 +57,7 @@ def generate(config, keys, inputs):
     store_correlations = config['store_correlations']
     column_labels = config['column_labels']
 
-    subset_file = f"subset_{rank}.h5"
+    subset_file = f"job_{job}_subset_{rank}.h5"
     start_index = 0
     if os.path.exists( os.path.join(subset_dir, subset_file) ):
         with h5py.File(os.path.join(subset_dir, subset_file), "r") as f:
@@ -94,7 +96,7 @@ def generate(config, keys, inputs):
              output_dir=subset_dir, processes=processes, parallel_method=parallel_method,
              store_columns=store_columns, store_correlations=store_correlations, column_labels=column_labels)
 
-def merge_hdf5_files(output_dir):
+def merge_hdf5_files(output_dir, job):
     """
     Merge all the hdf5 files in the output directory into a single file.
     This is useful for cleaning up the output directory and making it easier to work with.
@@ -103,9 +105,9 @@ def merge_hdf5_files(output_dir):
     num_ranks = MPI.COMM_WORLD.Get_size()
     if rank == 0:
         # Create a new hdf5 file to hold the merged data
-        with h5py.File(os.path.join(output_dir, "merged_data.h5"), "w") as f:
+        with h5py.File(os.path.join(output_dir, f"job_{job}_merged_data.h5"), "w") as f:
             for i in range(num_ranks):
-                subset_file = f"subset_{i}.h5"
+                subset_file = f"job_{job}_subset_{i}.h5"
                 with h5py.File(os.path.join(output_dir, subset_file), "r") as g:
                     # Copy all attrs fields
                     for key in g.attrs.keys():
@@ -114,16 +116,16 @@ def merge_hdf5_files(output_dir):
                     for name in g:
                         group = g[name]
                         f.copy(group, name)
-        print(f"Rank {rank} merged hdf5 files into {os.path.join(output_dir, 'merged_data.h5')}", flush=True)
+        print(f"Rank {rank} merged hdf5 files into {os.path.join(output_dir, f'job_{job}_merged_data.h5')}", flush=True)
 
-def remove_subset_files(output_dir, subset_pattern="subset_{}.h5"):
+def remove_subset_files(output_dir, job, subset_pattern="job_{}_subset_{}.h5"):
     """
     Clean up the subset files in the output directory.
     This is useful for cleaning up the output directory after merging the files.
     """
     num_ranks = MPI.COMM_WORLD.Get_size()
     for i in range(num_ranks):
-        subset_file = subset_pattern.format(i)
+        subset_file = subset_pattern.format(job, i)
         if os.path.exists(os.path.join(output_dir, subset_file)):
             os.remove(os.path.join(output_dir, subset_file))
     print("Removed subset files.", flush=True)
@@ -174,9 +176,15 @@ def receive_keys(comm):
 def root(comm, param_loc):
 
     config = load_yaml_config(param_loc)
+    job = config.get('job', 0)  # Get the job number if it exists, default to 0
+    num_jobs = config.get('num_jobs', 1)  # Get the number of
     data = np.load(  config['param_loc'], allow_pickle=True)
     keys = data['keys']
     inputs = data['values']
+
+    # Reduce inputs to just what this job will take care of. Evenly space the slices so no job gets all the hard inputs
+    inputs = inputs[job::num_jobs]
+
     # return_product = config['return_product']
     # assert return_product in ["correlation", "columns"], f"Invalid return product {return_product}. Must be 'correlation' or 'columns'."
 
@@ -220,9 +228,9 @@ def root(comm, param_loc):
     MPI.Request.Waitall(requests)
 
     # Merge files
-    merge_hdf5_files(config['subset_dir'])
+    merge_hdf5_files(config['subset_dir'], job)
     # Clean up subset files
-    remove_subset_files(config['subset_dir'])
+    remove_subset_files(config['subset_dir'], job)
 
     return 0
 
@@ -231,6 +239,8 @@ def nonroot(comm):
 
     # Receive the config from root
     config = comm.bcast(None, root=0)
+    job = config.get('job', 0)  # Get the job number if it exists, default to 0
+    num_jobs = config.get('num_jobs', 1)  # Get the number of
 
     # Receive the keys from root
     keys = receive_keys(comm)

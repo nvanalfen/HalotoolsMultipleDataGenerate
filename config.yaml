@@ -3,6 +3,8 @@ param_loc: fast_params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
 subset_dir: subsets/
+job: 1
+num_jobs: 2
 
 # Array parameters
 # method: logspace, file, list

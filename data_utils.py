@@ -2,18 +2,26 @@ import yaml
 import numpy as np
 import os
 
-def load_yaml_config(config_file):
+def load_yaml_config(config_file, restructure=True):
     """
     Load a YAML configuration file.
     """
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
 
-    config["rbins"] = parse_array_field(config, "rbins")
-    config["sat_bins"] = parse_array_field(config, "sat_bins")
-    parse_processes(config)
+    if restructure:
+        config["rbins"] = parse_array_field(config, "rbins")
+        config["sat_bins"] = parse_array_field(config, "sat_bins")
+        parse_processes(config)
 
     return config
+
+def save_yaml_config(config, config_file):
+    """
+    Save a configuration dictionary to a YAML file.
+    """
+    with open(config_file, 'w') as file:
+        yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 def parse_array_field(config, key):
     """
@@ -40,7 +48,6 @@ def parse_array_field(config, key):
     else:
         raise ValueError(f"Unknown method {method} for {key} in config file.")
     
-
 def parse_processes(config):
     """
     Adjust the values of processes and ntasks in the config file.
