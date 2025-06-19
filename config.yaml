@@ -53,8 +53,9 @@ parallelization: "iteration"            # Parallelization method: correlation or
 # Return product options:
 # correlation - Return the correlation function (default)
 # table - Return the table columns (e.g. x, y, z, vx, vy, vz) for each halo in the catalog
-return_product: "columns"             # What to return from the function: correlation or table columns (correlation or columns)
-return_columns: ["x", "y", "z", galaxy_axisA_x, galaxy_axisA_y, galaxy_axisA_z]                             # Columns to return if return_product = table. If null, will return all columns. Ignored if method = correlation
+store_columns: True                     # If true, will store the columns in the output file
+store_correlations: True                 # If true, will store the correlation function in the output file
+column_labels: ["x", "y", "z", galaxy_axisA_x, galaxy_axisA_y, galaxy_axisA_z]                             # Columns to return if store_columns = True
 
 # This slurm section will replace the typical submit.sh file letting you run the code with sbatch
 # without needing to update the submit.sh file each time
@@ -63,11 +64,11 @@ slurm:
   # Slurm parameters
   --job-name: "mpi_generate"                                      # Job name
   --partition: "short"                                            # Partition
-  --time: "5:00:00"                                               # Time limit (hh:mm:ss)
+  --time: "0:30:00"                                               # Time limit (hh:mm:ss)
   --mem-per-cpu: "1GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
-  --ntasks: 5                                                     # Number of tasks (processes)
-  --cpus-per-task: 3                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
+  --ntasks: 4                                                     # Number of tasks (processes)
+  --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
   --output: "output_logs/mpi_example.out"                         # Output file
   --error: "error_logs/mpi_example.err"                           # Error file
 #  --mail_type: "ALL"                                              # Mail type (NONE, BEGIN, END, FAIL, ALL)
