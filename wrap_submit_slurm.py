@@ -20,6 +20,10 @@ def generate_multijob_configs(base_config):
         script_args[0] = config_f_name
         new_config["slurm"]["script_args"] = script_args
 
+        # Update error and output file locations
+        new_config["slurm"]["--error"] = f"error_logs/job_{i}.err"
+        new_config["slurm"]["--output"] = f"output_logs/job_{i}.out"
+
         # Save the new config to a file
         save_yaml_config(new_config, config_f_name)
         # Load config back to process it

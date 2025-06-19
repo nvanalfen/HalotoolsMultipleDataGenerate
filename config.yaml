@@ -71,8 +71,8 @@ slurm:
   --nodes: 1                                                      # Number of nodes
   --ntasks: 4                                                     # Number of tasks (processes)
   --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
-  --output: "output_logs/mpi_example.out"                         # Output file
-  --error: "error_logs/mpi_example.err"                           # Error file
+  --output: "output_logs/mpi_generate.out"                         # Output file
+  --error: "error_logs/mpi_generate.err"                           # Error file
 #  --mail_type: "ALL"                                              # Mail type (NONE, BEGIN, END, FAIL, ALL)
 #  --mail_user: ""                                                 # Email address for notifications
 
