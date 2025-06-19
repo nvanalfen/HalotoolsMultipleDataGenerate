@@ -1,10 +1,10 @@
 # File parameters
-param_loc: fast_params.npz
+param_loc: params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
 subset_dir: subsets/
-job: 1
-num_jobs: 2
+job: 0
+num_jobs: 50
 
 # Array parameters
 # method: logspace, file, list
@@ -44,7 +44,7 @@ save_every: 5                           # Save every set of n inputs (all or non
 # Other parameters
 # If processes is null, it will be replaced with the value of runs (if iteration parallelication is chosen),
 # or 3 (if correlation parallelization is chosen).
-processes: 2                         # Number of processes to use for multiprocessing
+processes: 5                         # Number of processes to use for multiprocessing
 cap_processes: True                     # If true, will cap the number of processes to --cpus-per-task in the slurm section (if --cpus-per-task is not null)
 # Parallelization options:
 # correlation - Do each iteration in series, but parallelize the correlations inside each iteration
@@ -69,7 +69,7 @@ slurm:
   --time: "0:30:00"                                               # Time limit (hh:mm:ss)
   --mem-per-cpu: "1GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
-  --ntasks: 4                                                     # Number of tasks (processes)
+  --ntasks: 5                                                     # Number of tasks (processes)
   --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
   --output: "output_logs/mpi_generate.out"                         # Output file
   --error: "error_logs/mpi_generate.err"                           # Error file
