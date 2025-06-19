@@ -20,10 +20,11 @@ def generate_multijob_configs(base_config):
         script_args[0] = config_f_name
         new_config["slurm"]["script_args"] = script_args
 
-        # Add the new config to the list of configs
-        configs.append(new_config)
         # Save the new config to a file
         save_yaml_config(new_config, config_f_name)
+        # Load config back to process it
+        new_config = load_yaml_config(config_f_name, restructure=True)
+        configs.append(new_config)
     return configs
 
 if __name__ == "__main__":
