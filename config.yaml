@@ -74,8 +74,8 @@ slurm:
 #  --mail_type: "ALL"                                              # Mail type (NONE, BEGIN, END, FAIL, ALL)
 #  --mail_user: ""                                                 # Email address for notifications
 
-  modules: ["openmpi/4.1.5-gcc11.1"]                              # Modules to load (optional)
-  source: "/work/blazek_group_storage/miniconda3/bin/activate"    # Path to conda activate environment (optional)
+  modules: ["OpenMPI/4.1.6"]                              # Modules to load (optional)
+  source: "/projects/blazek_group_storage/miniconda3/bin/activate"    # Path to conda activate environment (optional)
   conda_env: "halotools"                                          # Name of conda environment to activate (optional)
   cli_command: "mpirun"                                           # Command to run the script
   cli_args: ["--mca", "btl", "vader,self"]                        # Arguments for the command
