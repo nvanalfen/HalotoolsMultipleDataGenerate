@@ -231,10 +231,13 @@ def iter_all(model_dict, halocat, input_dict, rbins, runs=10, max_attempts=5,
                 temp_results = pool.starmap(one_pass, rows)
 
             # Because results is a list of tuples where the first element is non-uniform shape, we have to store differently
+            # Since we're only calculating a smaller subset, the indices won't match. Manually increment the temp_results index
+            idx = 0
             for i in range(len(repeat)):
                 if repeat[i]:
                     # Only replace the ones that have been repeated this round
-                    results[i] = temp_results[i]
+                    results[i] = temp_results[idx]
+                    idx += 1
 
             # Check for nans
             # If any of the results are nan, set repeat to true for that index
