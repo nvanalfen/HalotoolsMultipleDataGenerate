@@ -2,7 +2,7 @@
 param_loc: params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
-subset_dir: subsets/
+subset_dir: /scratch/nvanalfen/subsets/
 job: 0
 num_jobs: 50
 
