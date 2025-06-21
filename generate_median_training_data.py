@@ -175,17 +175,33 @@ def one_pass(model_dict, halocat, input_dict, rbins,
     param_dict["sat_bins"] = sat_bins
     param_dict["halocat"] = halocat
     param_dict["seed"] = seed
-    model = build_specific_model_instance(**param_dict)
+
+    try:
+        model = build_specific_model_instance(**param_dict)
+    except ValueError as e:
+        print(f"\n>>>>>\nError building model.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
+        return [], []
+    except Exception as e:
+        print(f"\n>>>>>\nUnexpected error building model.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
+        return [], []
 
     table = []
     corrs = []
 
     if store_columns:
-        # Assume not None by this point in the code
-        table = model.mock.galaxy_table[column_labels]
+        try:
+            # Assume not None by this point in the code
+            table = model.mock.galaxy_table[column_labels]
+        except Exception as e:
+            print(f"\n>>>>>\nUnexpected error accessing columns.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
+            return [], []
     if store_correlations:
-        # Calculate correlations
-        corrs = corr_all(model, rbins, halocat, parallel=(parallel_method=="correlation"), processes=processes)
+        try:
+            # Calculate correlations
+            corrs = corr_all(model, rbins, halocat, parallel=(parallel_method=="correlation"), processes=processes)
+        except Exception as e:
+            print(f"\n>>>>>\nUnexpected error calculating correlations.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
+            return [], []
 
     return table, corrs
 
