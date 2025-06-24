@@ -87,7 +87,7 @@ def generate(config, keys, inputs):
 
     # Loop through the inputs and create catalogs/correlations
     for i in range(len(inputs))[start_index:]:
-        input_num = (i*num_ranks) + rank
+        input_num = ( (i*num_ranks) + rank )*num_jobs + job
         input_row = inputs[i]
         input_dict = {keys[j]: input_row[j] for j in range(len(keys))}
 
