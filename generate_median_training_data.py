@@ -176,14 +176,16 @@ def one_pass(model_dict, halocat, input_dict, rbins,
     param_dict["halocat"] = halocat
     param_dict["seed"] = seed
 
+    nan_corrs = np.ones((3,rbins-1))*np.nan             # Auto nan for repeat to return if there's an issue
+
     try:
         model = build_specific_model_instance(**param_dict)
     except ValueError as e:
         print(f"\n>>>>>\nError building model.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
-        return [], []
+        return [], nan_corrs
     except Exception as e:
         print(f"\n>>>>>\nUnexpected error building model.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
-        return [], []
+        return [], nan_corrs
 
     table = []
     corrs = []
@@ -194,14 +196,14 @@ def one_pass(model_dict, halocat, input_dict, rbins,
             table = model.mock.galaxy_table[column_labels]
         except Exception as e:
             print(f"\n>>>>>\nUnexpected error accessing columns.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
-            return [], []
+            return [], nan_corrs
     if store_correlations:
         try:
             # Calculate correlations
             corrs = corr_all(model, rbins, halocat, parallel=(parallel_method=="correlation"), processes=processes)
         except Exception as e:
             print(f"\n>>>>>\nUnexpected error calculating correlations.\n\tParameters: {input_dict}\n\tError:{e}\n>>>>>\n")
-            return [], []
+            return [], nan_corrs
 
     return table, corrs
 
@@ -258,7 +260,13 @@ def iter_all(model_dict, halocat, input_dict, rbins, runs=10, max_attempts=5,
             # Check for nans
             # If any of the results are nan, set repeat to true for that index
             corr_results = [ res[1] for res in results ]  # Extract the correlations from the results
-            repeat = np.isnan(corr_results).any(axis=(1,2))        # Check for nans in the results array
+            if store_correlations:
+                try:
+                    repeat = np.isnan(corr_results).any(axis=(1,2))        # Check for nans in the results array
+                except:
+                    print("Error calculating repeat vector, ")
+            else:
+                repeat = np.zeros(runs, dtype=bool)
 
             # Update attempt counter
             attempt += 1
