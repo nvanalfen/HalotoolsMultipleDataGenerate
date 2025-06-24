@@ -1,8 +1,8 @@
 # File parameters
-param_loc: params.npz
+param_loc: mid_params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
-subset_dir: /scratch/nvanalfen/subsets/
+subset_dir: /scratch/nvanalfen/speed_test/
 job: 0
 num_jobs: 50
 
@@ -37,14 +37,14 @@ constant_alignment_strength: true       # If true, all centrals share a central_
 seed: null                              # Seed for population
 
 # data_generation parameters
-runs: 10                                # Number of iterations for each input
+runs: 1                                # Number of iterations for each input
 max_attempts: 5                         # Number of attempts for each run to try in case of nans (will retry if nans are found)
 save_every: 5                           # Save every set of n inputs (all or none on the iterations)
 
 # Other parameters
 # If processes is null, it will be replaced with the value of runs (if iteration parallelication is chosen),
 # or 3 (if correlation parallelization is chosen).
-processes: 5                         # Number of processes to use for multiprocessing
+processes: 1                         # Number of processes to use for multiprocessing
 cap_processes: True                     # If true, will cap the number of processes to --cpus-per-task in the slurm section (if --cpus-per-task is not null)
 # Parallelization options:
 # correlation - Do each iteration in series, but parallelize the correlations inside each iteration
@@ -56,7 +56,7 @@ parallelization: "iteration"            # Parallelization method: correlation or
 # correlation - Return the correlation function (default)
 # table - Return the table columns (e.g. x, y, z, vx, vy, vz) for each halo in the catalog
 store_columns: True                     # If true, will store the columns in the output file
-store_correlations: True                 # If true, will store the correlation function in the output file
+store_correlations: False                 # If true, will store the correlation function in the output file
 column_labels: ["x", "y", "z", galaxy_axisA_x, galaxy_axisA_y, galaxy_axisA_z]                             # Columns to return if store_columns = True
 
 # This slurm section will replace the typical submit.sh file letting you run the code with sbatch
@@ -66,10 +66,10 @@ slurm:
   # Slurm parameters
   --job-name: "mpi_generate"                                      # Job name
   --partition: "short"                                            # Partition
-  --time: "24:00:00"                                               # Time limit (hh:mm:ss)
+  --time: "3:00:00"                                               # Time limit (hh:mm:ss)
   --mem-per-cpu: "2GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
-  --ntasks: 5                                                     # Number of tasks (processes)
+  --ntasks: 25                                                     # Number of tasks (processes)
   --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
   --output: "output_logs/mpi_generate.out"                         # Output file
   --error: "error_logs/mpi_generate.err"                           # Error file
