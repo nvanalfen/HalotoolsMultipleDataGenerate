@@ -5,4 +5,5 @@ results/
 output_logs/
 error_logs/
 params.npz
+mid_params.npz
 temp_configs/
