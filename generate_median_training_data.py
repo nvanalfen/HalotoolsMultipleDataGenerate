@@ -176,7 +176,7 @@ def one_pass(model_dict, halocat, input_dict, rbins,
     param_dict["halocat"] = halocat
     param_dict["seed"] = seed
 
-    nan_corrs = np.ones((3,rbins-1))*np.nan             # Auto nan for repeat to return if there's an issue
+    nan_corrs = np.ones((3,len(rbins)-1))*np.nan             # Auto nan for repeat to return if there's an issue
 
     try:
         model = build_specific_model_instance(**param_dict)
