@@ -66,7 +66,7 @@ slurm:
   # Slurm parameters
   --job-name: "mpi_generate"                                      # Job name
   --partition: "short"                                            # Partition
-  --time: "3:00:00"                                               # Time limit (hh:mm:ss)
+  --time: "0:30:00"                                               # Time limit (hh:mm:ss)
   --mem-per-cpu: "2GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
   --ntasks: 25                                                     # Number of tasks (processes)

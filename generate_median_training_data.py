@@ -158,7 +158,10 @@ def generate_data(model_dict, halocat, input_dict, rbins, f_name, input_num, run
             table, corrs = results[i]
             # Store the table subset if requested
             if store_columns:
-                iter_grp.create_dataset("table_subset", data=table)
+                iter_grp.create_group("table_subset")
+                table_grp = iter_grp["table_subset"]
+                for col in column_labels:
+                    table_grp.create_dataset(col, data=table[col])
             # Store the correlations if requested
             if store_correlations:
                 iter_grp.create_dataset("correlations", data=corrs)
