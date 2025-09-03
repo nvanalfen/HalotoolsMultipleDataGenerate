@@ -2,7 +2,7 @@
 param_loc: mid_params.npz
 output: results/results.npz
 checkpoint_dir: checkpoints/
-subset_dir: /scratch/nvanalfen/speed_test/
+subset_dir: /scratch/nvanalfen/training/
 job: 0
 num_jobs: 50
 
@@ -57,7 +57,16 @@ parallelization: "iteration"            # Parallelization method: correlation or
 # table - Return the table columns (e.g. x, y, z, vx, vy, vz) for each halo in the catalog
 store_columns: True                     # If true, will store the columns in the output file
 store_correlations: False                 # If true, will store the correlation function in the output file
-column_labels: ["x", "y", "z", galaxy_axisA_x, galaxy_axisA_y, galaxy_axisA_z]                             # Columns to return if store_columns = True
+column_labels:                          # Columns to return if store_columns = True
+  - "x"
+  - "y"
+  - "z"
+  - "galaxy_axisA_x"
+  - "galaxy_axisA_y"
+  - "galaxy_axisA_z"
+  - "halo_id"
+  - "halo_upid"
+  - "gal_type"
 
 # This slurm section will replace the typical submit.sh file letting you run the code with sbatch
 # without needing to update the submit.sh file each time
@@ -67,7 +76,7 @@ slurm:
   --job-name: "mpi_generate"                                      # Job name
   --partition: "short"                                            # Partition
   --time: "0:30:00"                                               # Time limit (hh:mm:ss)
-  --mem-per-cpu: "2GB"                                            # Memory per CPU
+  --mem-per-cpu: "1GB"                                            # Memory per CPU
   --nodes: 1                                                      # Number of nodes
   --ntasks: 25                                                     # Number of tasks (processes)
   --cpus-per-task: null                                           # Number of CPUs per task. If null, it will be replaced with the value of processes
