@@ -67,6 +67,12 @@ column_labels:                          # Columns to return if store_columns = T
   - "halo_id"
   - "halo_upid"
   - "gal_type"
+  - "halo_x"
+  - "halo_y"
+  - "halo_z"
+  - "halo_axisA_x"
+  - "halo_axisA_y"
+  - "halo_axisA_z"
 
 # This slurm section will replace the typical submit.sh file letting you run the code with sbatch
 # without needing to update the submit.sh file each time
